@@ -24,9 +24,16 @@ captures/
 *.iml
 .DS_Store
 
+# Build/run logs
+*.log
+
 # Media fixtures (large, regenerable)
 assets/media/
 *.mp4
 *.mkv
 *.wav
 *.mp3
+
+# ...except the small bundled tracer-slice clip, which must be committed
+# since it ships inside the APK and needs to be reproducible.
+!app/src/main/res/raw/sample_clip.mp4

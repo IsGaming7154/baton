@@ -120,4 +120,23 @@ For a hackathon that explicitly rewards open-source contribution, this is the mo
 
 ---
 
+---
+
+## 8. `androidx.tv:tv-foundation:1.0.0` forces a compileSdk bump the project's target device has nothing to do with
+
+**Severity:** medium
+**Area:** Android Gradle Plugin / dependency resolution
+
+**What was attempted.** Add `androidx.tv:tv-foundation:1.0.0` and `androidx.tv:tv-material:1.0.0` to a project pinned at `compileSdk = 34` (matching the Fire TV Stick HD's real ceiling of interest, API 28).
+
+**What happened.** The build failed immediately with roughly 30 separate `Dependency ... requires libraries and applications that depend on it to compile against ... API 35` / `... AGP 8.6.0 or higher` errors — one per transitive artifact pulled in by tv-foundation, not one summary error. The actual constraint is a single fact (tv-foundation 1.0.0's AAR metadata hard-requires `minCompileSdk=35` and AGP ≥ 8.6.0) baked into the artifact itself; it has nothing to do with anything the developer controls, but the failure presents as a wall of near-identical messages that reads like a cascading dependency conflict rather than one clear statement.
+
+Separately, once compileSdk/AGP were raised to satisfy that gate, resolving the tv artifacts' transitive graph without pinning pulled in `kotlin-stdlib:2.1.20` (a hard dependency constraint in tv-foundation's own POM) and `compose-ui-tooling:1.10.x`, both incompatible with this project's Kotlin 1.9.24 compiler — `compileDebugKotlin` failed with "Module was compiled with an incompatible version of Kotlin. The binary version of its metadata is 2.1.0, expected version is 1.9.0." The tv-foundation-1.0.0 AAR was itself built with a Kotlin 2.1 compiler, and Kotlin's metadata format is not forward-readable by an older compiler.
+
+**Workaround.** compileSdk and minSdk are independent, and the error message does at least say so explicitly — raising `compileSdk` to 35 costs nothing at runtime and does not raise the device floor; `minSdk` stays 28. For the transitive graph, excluding `androidx.compose.*`, `androidx.activity`, `androidx.lifecycle`, `androidx.savedstate`, `androidx.core`, and `org.jetbrains.kotlin` from the two `androidx.tv` dependencies and re-declaring them explicitly against compose-bom 2024.06.00, plus `-Xskip-metadata-version-check` in `freeCompilerArgs`, gets a real build through. `-Xskip-metadata-version-check` is a genuine compiler escape hatch (not a hack invented here) for exactly this situation, but it is a blunt instrument — it disables a real correctness gate project-wide, not just for tv-foundation.
+
+**Documentation gap.** Nothing in the `androidx.tv` release notes or the AAR-metadata error text mentions the Kotlin-compiler-version constraint; it only surfaces once compileSdk/AGP are already fixed, so a developer sees two unrelated-looking failures in sequence for what is really one root cause: tv-material/tv-foundation 1.0.0 was built with much newer tooling than a project targeting API 28 hardware has any reason to be running.
+
+---
+
 *Entries are appended as they are encountered. This log is a deliverable, not a postscript.*
