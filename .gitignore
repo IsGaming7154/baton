@@ -1,0 +1,32 @@
+# OPSEC — private research, never pushed
+DEEP_RESEARCH/
+.remember/
+
+# Secrets
+.env
+.env.*
+*.pem
+aws-credentials*
+local.properties
+
+# Android / Gradle
+.gradle/
+build/
+captures/
+*.apk
+*.aab
+*.keystore
+*.jks
+.cxx/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Media fixtures (large, regenerable)
+assets/media/
+*.mp4
+*.mkv
+*.wav
+*.mp3
