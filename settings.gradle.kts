@@ -18,3 +18,4 @@ rootProject.name = "baton"
 
 include(":app")
 include(":player")
+include(":director")
