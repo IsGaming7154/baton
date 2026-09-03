@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "dev.baton.tv"
-    // compileSdk/targetSdk 35: androidx.tv:tv-foundation:1.0.0's AAR metadata
+    // compileSdk/targetSdk 35: the androidx.tv artifacts' AAR metadata
     // hard-requires minCompileSdk=35 and AGP>=8.6.0 -- baked into the
     // artifact itself, unrelated to any dependency version we control. See
     // FRICTION_LOG.md. minSdk stays 28: that is the only figure that governs
@@ -37,7 +37,6 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
-        freeCompilerArgs += "-Xskip-metadata-version-check"
     }
 
     buildFeatures {
@@ -55,15 +54,11 @@ android {
     }
 }
 
-// androidx.tv:tv-material / tv-foundation 1.0.0 pull in their own, much
-// newer transitive graph when left unpinned: tv-foundation's POM carries a
-// hard dependency constraint on kotlin-stdlib 2.1.20 (incompatible with the
-// Kotlin 1.9.24 compiler this project builds with -- "Incompatible classes
-// were found in dependencies"), and drags compose-ui-tooling up to 1.10.x
-// along with it, overriding the compose-bom 2024.06.00 pin. Excluding those
-// transitive groups and re-declaring them ourselves keeps the whole graph on
-// versions that were current when tv-material/tv-foundation 1.0.0 shipped.
-// This is unrelated to compileSdk, which is 35 (see comment above).
+// androidx.tv:tv-material 1.0.0 pulls in a much newer transitive graph when
+// left unpinned, dragging compose artifacts up to 1.10.x and overriding the
+// compose-bom 2024.06.00 pin. Excluding those groups and re-declaring them
+// ourselves keeps the graph on versions current when tv-material 1.0.0
+// shipped. Unrelated to compileSdk, which is 35 (see comment above).
 val tvTransitiveExclusions = listOf(
     "androidx.compose.runtime",
     "androidx.compose.foundation",
@@ -73,7 +68,6 @@ val tvTransitiveExclusions = listOf(
     "androidx.lifecycle",
     "androidx.savedstate",
     "androidx.core",
-    "org.jetbrains.kotlin",
 )
 
 dependencies {
@@ -87,9 +81,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3")
 
     implementation("androidx.tv:tv-material:1.0.0") {
-        tvTransitiveExclusions.forEach { exclude(group = it) }
-    }
-    implementation("androidx.tv:tv-foundation:1.0.0") {
         tvTransitiveExclusions.forEach { exclude(group = it) }
     }
 
