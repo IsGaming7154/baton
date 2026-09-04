@@ -3,6 +3,7 @@ package dev.baton.director
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.property.checkAll
 
 /**
@@ -26,10 +27,9 @@ class AudioDirectorInvariantTest : FunSpec({
         }
     }
 
-    test("the same holds when the guard and duck are configured differently") {
-        val config = DirectorConfig(guardMs = 0, duckDb = -6.0)
+    test("the same holds when the guard, the duck and the backstop are configured differently") {
         checkAll(300, scenarios) { scenario ->
-            drive(scenario, config)
+            drive(scenario, IMPATIENT)
         }
     }
 
@@ -41,6 +41,7 @@ class AudioDirectorInvariantTest : FunSpec({
     test("the generated timelines actually exercise the cases they claim to") {
         val seen = Coverage()
         checkAll(500, scenarios) { scenario -> drive(scenario, coverage = seen) }
+        checkAll(300, scenarios) { scenario -> drive(scenario, IMPATIENT, coverage = seen) }
 
         // Thresholds sit at roughly a third of what the generators actually
         // produce, so they catch a generator that stops reaching a case without
@@ -58,6 +59,8 @@ class AudioDirectorInvariantTest : FunSpec({
             (seen.pauseDuringSpeech > 100) shouldBe true
             (seen.speakerEndedSpeech > 300) shouldBe true
             (seen.cueReplayedAfterSeek > 20) shouldBe true
+            (seen.overranMeasuredLength > 90) shouldBe true
+            (seen.floorTimeouts > 12) shouldBe true
         }
     }
 })
@@ -66,6 +69,14 @@ class AudioDirectorInvariantTest : FunSpec({
 // Driving
 // ---------------------------------------------------------------------------
 
+/**
+ * Every number moved off its default, and the backstop moved a long way: a
+ * generated timeline is a few seconds of content, so a two-second slack would put
+ * the timeout path almost out of reach and the coverage guard would be certifying
+ * a case the suite hardly reaches.
+ */
+private val IMPATIENT = DirectorConfig(guardMs = 0, duckDb = -6.0, speechTimeoutSlackMs = 300)
+
 private fun drive(
     scenario: Scenario,
     config: DirectorConfig = DirectorConfig(),
@@ -73,6 +84,7 @@ private fun drive(
 ) {
     val director = AudioDirector(scenario.track, config)
     val invariants = Invariants(scenario.track, config)
+    val speaker = FakeSpeaker()
 
     var nowMs = 0L
     var positionMs = 0L
@@ -95,7 +107,7 @@ private fun drive(
             events += InputEvent.Seeked
         }
         if (!step.reactiveBeforeSeek) events += requests
-        (previous as? Speaking.Utterance)?.let { if (step.reportSpeechEnded) events += InputEvent.SpeechEnded(it.id) }
+        speaker.report(previous as? Speaking.Utterance, step, nowMs, positionMs)?.let { events += it }
         if (step.reportPhantomEnd) events += InputEvent.SpeechEnded(UtteranceId("phantom"))
 
         val wasPlaying = playback == Playback.PLAYING
@@ -105,6 +117,33 @@ private fun drive(
         invariants.check(index, nowMs, positionMs, playback, events, directive)
         coverage.record(scenario.track, previous, directive, positionMs, events, wasPlaying, playback, cueStarts)
         previous = directive.speaking
+    }
+}
+
+/**
+ * A speaker with three behaviours: it usually reports the moment the audio it was
+ * handed runs out, it sometimes reports early, and it sometimes takes an utterance
+ * and is never heard from again.
+ *
+ * The last one is the reason the director waits to be told rather than working the
+ * ending out for itself, so the generated runs have to contain it.
+ */
+private class FakeSpeaker {
+    private val seen = mutableSetOf<Pair<String, Long>>()
+    private val stalled = mutableSetOf<Pair<String, Long>>()
+
+    fun report(holder: Speaking.Utterance?, step: Step, nowMs: Long, positionMs: Long): InputEvent.SpeechEnded? {
+        if (holder == null) return null
+        val instance = holder.id.value to holder.startedAtMs
+        if (seen.add(instance) && step.speakerStalls) stalled += instance
+        if (instance in stalled) return null
+        if (step.reportSpeechEnded) return InputEvent.SpeechEnded(holder.id)
+
+        val runOut = when (holder) {
+            is Speaking.ScheduledUtterance -> positionMs >= holder.endsAtPositionMs
+            is Speaking.ReactiveUtterance -> holder.endsAtMs?.let { nowMs >= it } ?: false
+        }
+        return if (runOut) InputEvent.SpeechEnded(holder.id) else null
     }
 }
 
@@ -122,6 +161,8 @@ private class Coverage {
     var pauseDuringSpeech = 0
     var speakerEndedSpeech = 0
     var cueReplayedAfterSeek = 0
+    var overranMeasuredLength = 0
+    var floorTimeouts = 0
 
     fun record(
         track: DescriptionTrack,
@@ -145,6 +186,7 @@ private class Coverage {
 
             is Speaking.ScheduledUtterance -> {
                 scheduledSpeaking++
+                if (positionMs >= speaking.endsAtPositionMs) overranMeasuredLength++
                 val firstStart = cueStarts[speaking.cueId]
                 if (firstStart == null) {
                     cueStarts[speaking.cueId] = speaking.startedAtMs
@@ -163,6 +205,8 @@ private class Coverage {
             }
         }
 
+        if (directive.floorTimeout != null) floorTimeouts++
+
         if (previous is Speaking.Utterance) {
             if (events.any { it is InputEvent.Seeked }) seekDuringSpeech++
             if (wasPlaying && playback == Playback.PAUSED) pauseDuringSpeech++
@@ -175,7 +219,7 @@ private class Coverage {
         "noFit=$dropsNoVariantFits noSilence=$dropsNoSilenceAtCueStart noVariants=$dropsNoVariants " +
         "preempted=$reactivePreemptedScheduled seekDuringSpeech=$seekDuringSpeech " +
         "pauseDuringSpeech=$pauseDuringSpeech speakerEnded=$speakerEndedSpeech " +
-        "replayed=$cueReplayedAfterSeek)"
+        "replayed=$cueReplayedAfterSeek overran=$overranMeasuredLength timeouts=$floorTimeouts)"
 }
 
 /**
@@ -221,7 +265,8 @@ private class Invariants(
                 is Speaking.ScheduledUtterance -> checkScheduled(speaking, positionMs, playback)
                 is Speaking.ReactiveUtterance -> checkReactive(speaking, nowMs)
             }
-            checkNobodyWasCutOff(directive, nowMs, positionMs, playback, events)
+            checkFloorTimeout(directive)
+            checkNobodyWasCutOff(directive, playback, events)
             checkSeekLeavesSilence(directive, events)
         }
 
@@ -272,12 +317,6 @@ private class Invariants(
             speaking.duration shouldBe cue.variants[speaking.variantIndex].measuredDuration
         }
 
-        // THE invariant: the film's own dialogue is a voice, and nothing of ours
-        // is ever heard on top of it.
-        withClue("a scheduled utterance is speaking over content dialogue") {
-            track.silence.isSilentAt(positionMs) shouldBe true
-        }
-
         val grantedWindowEnd = track.silence.windowEndAt(speaking.startedAtPositionMs)
         withClue("a scheduled utterance started outside any silence window") {
             (grantedWindowEnd != null) shouldBe true
@@ -285,11 +324,30 @@ private class Invariants(
         withClue("a scheduled utterance was granted room it does not have") {
             (speaking.endsAtPositionMs + config.guardMs <= grantedWindowEnd!!) shouldBe true
         }
-        withClue("a scheduled utterance drifted out of the window it was granted") {
-            track.silence.windowEndAt(positionMs) shouldBe grantedWindowEnd
+
+        // THE invariant: the film's own dialogue is a voice, and nothing of ours
+        // is ever heard on top of it.
+        //
+        // Scoped to the length the audio was measured to be, which is the whole
+        // extent of what the director controls. Past that point the utterance is
+        // only still named because the speaker has not reported, and the director
+        // cannot make audio it does not own stop being audible -- releasing the
+        // floor there would not silence the overrun, it would merely add a second
+        // voice to it. So the guarantee is that a scheduled voice never *starts*
+        // over dialogue and never runs into it on the director's own arithmetic;
+        // an overrun past that is a speaker fault, and it is reported as one.
+        if (positionMs < speaking.endsAtPositionMs) {
+            withClue("a scheduled utterance is speaking over content dialogue") {
+                track.silence.isSilentAt(positionMs) shouldBe true
+            }
+            withClue("a scheduled utterance drifted out of the window it was granted") {
+                track.silence.windowEndAt(positionMs) shouldBe grantedWindowEnd
+            }
         }
-        withClue("a scheduled utterance is still named after it should have finished") {
-            (positionMs >= speaking.startedAtPositionMs && positionMs < speaking.endsAtPositionMs) shouldBe true
+
+        withClue("a scheduled utterance is still named after even the backstop expired") {
+            (positionMs >= speaking.startedAtPositionMs) shouldBe true
+            (positionMs < speaking.endsAtPositionMs + config.speechTimeoutSlackMs) shouldBe true
         }
         withClue("a cue that was reported as dropped is speaking anyway") {
             droppedSinceSeek.contains(speaking.cueId) shouldBe false
@@ -315,21 +373,46 @@ private class Invariants(
             speaking.length shouldBe request.length
         }
         speaking.endsAtMs?.let { endsAtMs ->
-            withClue("a reactive utterance is still named after it should have finished") {
-                (nowMs < endsAtMs) shouldBe true
+            withClue("a reactive utterance is still named after even the backstop expired") {
+                (nowMs < endsAtMs + config.speechTimeoutSlackMs) shouldBe true
             }
         }
     }
 
     /**
-     * Whoever held the floor last tick either still holds it, finished it, or was
-     * displaced for a reason the policy allows. Nothing is ever cut off silently:
-     * that is the failure that would put two voices in the room during the fade.
+     * A timeout is an accusation against the speaker, so it has to be earned: it
+     * may only name the utterance that actually held the floor, and only once that
+     * utterance is past its measured length by the whole of the slack.
+     */
+    private fun checkFloorTimeout(directive: Directive) {
+        val timeout = directive.floorTimeout ?: return
+        val holder = previous?.speaking as? Speaking.Utterance
+        withClue("a floor timeout names an utterance that was not holding the floor") {
+            (holder != null && holder.id == timeout.id) shouldBe true
+        }
+        withClue("a floor timeout must report the slack actually applied") {
+            timeout.slackMs shouldBe config.speechTimeoutSlackMs
+        }
+        withClue("a floor timeout fired before the utterance was overdue") {
+            (timeout.heldForMs >= timeout.predictedDurationMs + config.speechTimeoutSlackMs) shouldBe true
+        }
+        withClue("a floor timeout left the utterance it retired still speaking") {
+            (directive.speaking as? Speaking.Utterance)?.id shouldNotBe timeout.id
+        }
+    }
+
+    /**
+     * Whoever held the floor last tick either still holds it or was released for a
+     * reason the policy allows. Nothing is ever cut off silently: that is the
+     * failure that would put two voices in the room during the fade.
+     *
+     * Note what is *not* on the list of allowed causes: the utterance having run
+     * the length the pipeline measured. That used to end it, and this is the test
+     * that says it no longer may. Either the speaker reports, or the viewer
+     * intervenes, or the backstop fires and says so.
      */
     private fun checkNobodyWasCutOff(
         directive: Directive,
-        nowMs: Long,
-        positionMs: Long,
         playback: Playback,
         events: List<InputEvent>,
     ) {
@@ -344,13 +427,10 @@ private class Invariants(
         val timelineJumped = events.any { it is InputEvent.Seeked }
         val speakerReported = events.any { it is InputEvent.SpeechEnded && it.id == before.id }
         val pausedEdge = previousPlayback == Playback.PLAYING && playback == Playback.PAUSED
-        val ranItsLength = when (before) {
-            is Speaking.ScheduledUtterance -> positionMs >= before.endsAtPositionMs
-            is Speaking.ReactiveUtterance -> before.endsAtMs?.let { nowMs >= it } ?: false
-        }
+        val backstopFired = directive.floorTimeout?.id == before.id
 
         withClue("utterance ${before.id} stopped speaking with no cause the policy allows") {
-            (preemptedByUser || timelineJumped || speakerReported || pausedEdge || ranItsLength) shouldBe true
+            (preemptedByUser || timelineJumped || speakerReported || pausedEdge || backstopFired) shouldBe true
         }
     }
 

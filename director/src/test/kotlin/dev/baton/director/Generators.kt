@@ -27,7 +27,10 @@ internal class Step(
     val seek: Seek?,
     val reactives: List<ReactiveRequest>,
     val reactiveBeforeSeek: Boolean,
+    /** The speaker reports done before the audio it was handed has run out. */
     val reportSpeechEnded: Boolean,
+    /** The speaker takes this utterance and never reports on it again. */
+    val speakerStalls: Boolean,
     val reportPhantomEnd: Boolean,
 )
 
@@ -208,7 +211,8 @@ private fun randomSteps(random: Random): List<Step> = List(random.nextInt(8, 90)
             else -> emptyList()
         },
         reactiveBeforeSeek = random.nextBoolean(),
-        reportSpeechEnded = random.nextInt(4) == 0,
+        reportSpeechEnded = random.nextInt(8) == 0,
+        speakerStalls = random.nextInt(4) == 0,
         reportPhantomEnd = random.nextInt(20) == 0,
     )
 }

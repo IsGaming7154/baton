@@ -45,7 +45,14 @@ fun vqaAnswer(id: String, text: String = "A dragon fills the doorway.", millis: 
 
 /**
  * Drives an [AudioDirector] the way the player would: a wall clock, a content
- * position that only moves while playing, and a level playback state.
+ * position that only moves while playing, a level playback state, and a speaker
+ * that reports back.
+ *
+ * The speaker is part of the harness because the director no longer infers the
+ * end of an utterance from its length -- it waits to be told. A well-behaved
+ * speaker reports the moment the audio it was handed has run out, which is what
+ * [speakerReportsCompletion] models. Set it false to get a speaker that goes
+ * silent and never reports, which is the failure the timeout backstop exists for.
  *
  * The tests below only ever look at the [Directive] values this returns. Nothing
  * here reaches into the director.
@@ -53,8 +60,10 @@ fun vqaAnswer(id: String, text: String = "A dragon fills the doorway.", millis: 
 class Session(
     val track: DescriptionTrack,
     val config: DirectorConfig = DirectorConfig(),
+    private val speakerReportsCompletion: Boolean = true,
 ) {
     private val director = AudioDirector(track, config)
+    private var speaking: Speaking.Utterance? = null
 
     var nowMs: Long = 0L
         private set
@@ -107,9 +116,21 @@ class Session(
     }
 
     private fun advance(events: List<InputEvent> = emptyList()): Directive {
-        val directive = director.advance(nowMs, DirectorInputs(positionMs, playback, events))
+        val directive = director.advance(nowMs, DirectorInputs(positionMs, playback, speakerReport() + events))
+        speaking = directive.speaking as? Speaking.Utterance
         history += directive
         return directive
+    }
+
+    /** The speaker noticing that the audio it was handed has finished playing. */
+    private fun speakerReport(): List<InputEvent> {
+        if (!speakerReportsCompletion) return emptyList()
+        val utterance = speaking ?: return emptyList()
+        val finished = when (utterance) {
+            is Speaking.ScheduledUtterance -> positionMs >= utterance.endsAtPositionMs
+            is Speaking.ReactiveUtterance -> utterance.endsAtMs?.let { nowMs >= it } ?: false
+        }
+        return if (finished) listOf(InputEvent.SpeechEnded(utterance.id)) else emptyList()
     }
 
     companion object {
@@ -130,3 +151,5 @@ fun List<Directive>.spokenCueIds(): List<CueId> =
         .map { it.cueId }
 
 fun List<Directive>.allDrops(): List<DroppedCue> = flatMap { it.drops }
+
+fun List<Directive>.floorTimeouts(): List<FloorTimeout> = mapNotNull { it.floorTimeout }

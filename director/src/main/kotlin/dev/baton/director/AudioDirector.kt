@@ -33,6 +33,22 @@ package dev.baton.director
  * written for. The longest variant satisfying that wins. If none does, the cue is
  * dropped and the drop is reported with a reason.
  *
+ * ## The floor is released by observation, not by prediction
+ *
+ * An utterance keeps the floor until the speaker reports it has stopped. The
+ * measured duration says whether a cue may *start*; it does not decide when it
+ * has finished. Those are different questions, and answering the second one with
+ * arithmetic is how two voices end up in the room: on a 1 GB device, audio that
+ * stalls under memory pressure is still audible long after the clock says it
+ * ended, and a director that believed the clock would start the next voice on top
+ * of it. That failure only ever reproduces on real hardware.
+ *
+ * So `SpeechEnded` is authoritative and the duration is demoted to a backstop:
+ * after `measuredDurationMs + speechTimeoutSlackMs` the director stops waiting,
+ * takes the floor back, and reports a [FloorTimeout]. The report is the point --
+ * a timeout means the speaker misbehaved, and that is worth seeing rather than
+ * absorbing.
+ *
  * ## Deliberate readings of the policy, where it was silent
  *
  * - **Scheduled does not preempt scheduled.** Rule 3 ranks candidates when the
@@ -86,8 +102,6 @@ class AudioDirector(
         }
         lastNowMs = nowMs
 
-        retireFinished(nowMs, inputs.positionMs)
-
         // Entering pause stops whatever was in flight. Staying paused does not,
         // so an answer the viewer asked for while paused is allowed to finish.
         if (inputs.playback == Playback.PAUSED && lastPlayback == Playback.PLAYING) {
@@ -116,6 +130,11 @@ class AudioDirector(
             }
         }
 
+        // Only after the speaker has had its say on this tick, so that an
+        // utterance that reported on the same tick it came due is an ordinary
+        // ending rather than an anomaly.
+        val timeout = retireOverdue(nowMs, inputs.positionMs)
+
         val drops = if (inputs.playback == Playback.PLAYING && !timelineJumped) {
             arbitrateScheduled(nowMs, inputs.positionMs)
         } else {
@@ -127,21 +146,40 @@ class AudioDirector(
             speaking = holder ?: Speaking.Silent,
             contentDuck = if (holder == null) ContentDuck.Unity else ContentDuck.Ducked(config.duckDb),
             drops = drops,
+            floorTimeout = timeout,
         )
     }
 
-    /** Let go of the floor when the utterance holding it has run its length. */
-    private fun retireFinished(nowMs: Long, positionMs: Long) {
-        when (val holder = active) {
-            null -> Unit
+    /**
+     * The backstop. The speaker should have reported by now and has not, so take
+     * the floor back and say so.
+     *
+     * Each class is judged on its own clock: a scheduled utterance against the
+     * content timeline it was scheduled into, a reactive one against the wall
+     * clock the viewer is waiting on. A reactive utterance with no measured length
+     * has nothing to time out against and is not timed out -- it runs until the
+     * speaker reports or the viewer preempts it, which is what
+     * [SpeechLength.UntilSpeakerReports] means.
+     */
+    private fun retireOverdue(nowMs: Long, positionMs: Long): FloorTimeout? {
+        val holder = active ?: return null
+        val (startMs, endsAtMs, cursorMs) = when (holder) {
             is Speaking.ScheduledUtterance ->
-                if (positionMs >= holder.endsAtPositionMs) active = null
+                Triple(holder.startedAtPositionMs, holder.endsAtPositionMs, positionMs)
 
-            is Speaking.ReactiveUtterance -> {
-                val endsAtMs = holder.endsAtMs
-                if (endsAtMs != null && nowMs >= endsAtMs) active = null
-            }
+            is Speaking.ReactiveUtterance ->
+                Triple(holder.startedAtMs, holder.endsAtMs ?: return null, nowMs)
         }
+        if (cursorMs < endsAtMs + config.speechTimeoutSlackMs) return null
+
+        active = null
+        return FloorTimeout(
+            id = holder.id,
+            kind = holder.kind,
+            predictedDurationMs = endsAtMs - startMs,
+            slackMs = config.speechTimeoutSlackMs,
+            heldForMs = cursorMs - startMs,
+        )
     }
 
     /**

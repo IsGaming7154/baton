@@ -72,6 +72,7 @@ val tvTransitiveExclusions = listOf(
 
 dependencies {
     implementation(project(":player"))
+    implementation(project(":speech"))
 
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
@@ -85,4 +86,10 @@ dependencies {
     }
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    testImplementation("io.kotest:kotest-runner-junit5:5.9.1")
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
 }

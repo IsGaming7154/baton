@@ -8,6 +8,41 @@ Environment: Windows 11, Fire TV Stick HD (Fire OS 7 / Android 9 / API 28), targ
 
 ---
 
+## Building, installing and running
+
+Recorded here because half of it is the workaround for entry 7 and the other half is the workaround for entry 9.
+
+**Prerequisites.** A JDK 17 or newer, and the Android SDK platform-tools for `adb`. On this machine `java` on `PATH` is Java 8, so every Gradle invocation names the JDK explicitly:
+
+```sh
+export JAVA_HOME="C:/Program Files/Eclipse Adoptium/jdk-21.0.11.10-hotspot"
+export PATH="$PATH:$LOCALAPPDATA/Android/Sdk/platform-tools"
+```
+
+**On the Stick, once.** Settings → My Fire TV → Developer Options → ADB Debugging on. Settings → My Fire TV → About → Network for its IP address. The first `adb connect` puts an authorisation prompt on the television that has to be accepted with the remote.
+
+**Build, install, run, and watch what it decides:**
+
+```sh
+adb connect 192.168.1.17:5555
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n dev.baton.tv/.MainActivity
+adb logcat -s Baton:V
+```
+
+The app also appears on the Fire TV home row with its banner, because it declares `android.software.leanback` and a `LEANBACK_LAUNCHER` category.
+
+`Baton` is the one tag the whole runtime logs under, and the run reads end to end in it: which text-to-speech engines are installed, which one was selected and why, the frame count and measured duration of every rendered variant, each cue starting, the duck target, speech starting and ending, and which cause released the floor. A floor released by timeout rather than by the speaker is logged as `ANOMALY`.
+
+**The remote.** Play/pause, rewind and fast-forward come from the Media3 transport bar, which takes D-pad left/right and the dedicated media keys. `adb shell input keyevent 85` (play/pause), `89` (rewind) and `90` (fast-forward) drive the same path over the wire.
+
+**Removing it:** `adb uninstall dev.baton.tv`.
+
+**Two things that will waste an afternoon if you skip them.** `minSdk` is what governs whether the Stick will install the APK; `compileSdk` is 35 for the reason in entry 8 and is unrelated. And engine selection depends on `<queries>` for `android.intent.action.TTS_SERVICE` in the manifest — without it a build against a newer platform sees an empty device and speaks nothing, with no error.
+
+---
+
 ## 1. Fire OS has no hierarchy of auditory focus
 
 **Severity:** high — this is the project's thesis

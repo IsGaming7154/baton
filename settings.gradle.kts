@@ -18,5 +18,7 @@ rootProject.name = "baton"
 
 include(":app")
 include(":player")
+include(":ports")
+include(":speech")
 include(":director")
 include(":pipeline")

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Android 11 package visibility. Without this the platform hides every
+      text-to-speech service from queryIntentServices, and engine selection sees
+      an empty device. Harmless on the API 28 target, required the moment the
+      app is built against a newer platform.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+</manifest>

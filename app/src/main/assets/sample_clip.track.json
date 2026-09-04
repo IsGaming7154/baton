@@ -1,0 +1,64 @@
+{
+  "formatVersion": 1,
+  "sourceId": "sample-clip",
+  "locale": "en-US",
+  "synthetic": true,
+  "gapMap": [
+    { "startMs": 1500, "endMs": 11000 },
+    { "startMs": 11500, "endMs": 21000 },
+    { "startMs": 21500, "endMs": 30000 }
+  ],
+  "cues": [
+    {
+      "id": "d1",
+      "startMs": 2500,
+      "kind": "AUDIO_DESCRIPTION",
+      "variants": [
+        {
+          "text": "A test pattern fills the screen, and a steady tone holds underneath it.",
+          "measuredDurationMs": 4908,
+          "audioRef": null
+        },
+        {
+          "text": "A test pattern, and a steady tone.",
+          "measuredDurationMs": 3209,
+          "audioRef": null
+        }
+      ]
+    },
+    {
+      "id": "d2",
+      "startMs": 12500,
+      "kind": "SPOKEN_SUBTITLE",
+      "variants": [
+        {
+          "text": "The reference clip runs for thirty seconds at a constant level.",
+          "measuredDurationMs": 4143,
+          "audioRef": null
+        },
+        {
+          "text": "Thirty seconds at a constant level.",
+          "measuredDurationMs": 2814,
+          "audioRef": null
+        }
+      ]
+    },
+    {
+      "id": "d3",
+      "startMs": 22000,
+      "kind": "AUDIO_DESCRIPTION",
+      "variants": [
+        {
+          "text": "The tone returns to full volume as the description finishes.",
+          "measuredDurationMs": 4083,
+          "audioRef": null
+        },
+        {
+          "text": "The tone returns to full volume.",
+          "measuredDurationMs": 2674,
+          "audioRef": null
+        }
+      ]
+    }
+  ]
+}

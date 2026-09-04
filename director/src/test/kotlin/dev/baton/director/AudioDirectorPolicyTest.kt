@@ -1,5 +1,6 @@
 package dev.baton.director
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
@@ -370,6 +371,133 @@ class AudioDirectorPolicyTest : FunSpec({
             (utterance.endsAtPositionMs + DirectorConfig.DEFAULT_GUARD_MS <= windowEnd!!) shouldBe true
         }
         session.history.spokenCueIds() shouldBe listOf(CueId("a"), CueId("b"))
+    }
+
+    test("the floor is held past the measured duration until the speaker reports") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(0, 20_000)),
+                cues = listOf(cue("desc", startMs = 1_000, variants = listOf(variant("A gate swings shut.", 1_000)))),
+            ),
+            speakerReportsCompletion = false,
+        )
+
+        session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+
+        // Measured length is up at position 2000. The speaker has not reported, so
+        // the utterance still holds the floor and the content stays ducked.
+        val overrunning = session.playTo(2_500)
+        overrunning.speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("desc")
+        overrunning.contentDuck shouldBe ContentDuck.Ducked(-12.0)
+        session.history.floorTimeouts().shouldBeEmpty()
+
+        // And it is the speaker, not the clock, that ends it.
+        val released = session.speakerReports(UtteranceId("cue:desc"))
+        released.speaking shouldBe Speaking.Silent
+        released.contentDuck shouldBe ContentDuck.Unity
+        released.floorTimeout shouldBe null
+    }
+
+    test("a speaker that never reports has the floor taken back, and the timeout is recorded") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(0, 20_000)),
+                cues = listOf(cue("desc", startMs = 1_000, variants = listOf(variant("A gate swings shut.", 1_000)))),
+            ),
+            speakerReportsCompletion = false,
+        )
+
+        session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        session.playTo(3_900).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+
+        // Measured length ran out at 2000; the slack runs out at 4000.
+        val timedOut = session.playTo(4_000)
+        timedOut.speaking shouldBe Speaking.Silent
+        timedOut.contentDuck shouldBe ContentDuck.Unity
+        timedOut.floorTimeout shouldBe FloorTimeout(
+            id = UtteranceId("cue:desc"),
+            kind = UtteranceKind.Scheduled.AUDIO_DESCRIPTION,
+            predictedDurationMs = 1_000,
+            slackMs = DirectorConfig.DEFAULT_SPEECH_TIMEOUT_SLACK_MS,
+            heldForMs = 3_000,
+        )
+
+        // Reported once, and the cue does not come back for a second try.
+        session.playTo(8_000)
+        session.history.floorTimeouts() shouldHaveSize 1
+        session.history.spokenCueIds() shouldBe listOf(CueId("desc"))
+    }
+
+    test("a speaker reporting on time is not an anomaly") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(0, 20_000)),
+                cues = listOf(
+                    cue("a", startMs = 1_000, variants = listOf(variant("One.", 1_000))),
+                    cue("b", startMs = 5_000, variants = listOf(variant("Two.", 1_000))),
+                ),
+            ),
+        )
+
+        session.playTo(9_000)
+        session.history.spokenCueIds() shouldBe listOf(CueId("a"), CueId("b"))
+        session.history.floorTimeouts().shouldBeEmpty()
+    }
+
+    test("a speaker that finishes early releases the floor early") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(0, 20_000)),
+                cues = listOf(
+                    cue("desc", startMs = 1_000, variants = listOf(variant("A long description.", 4_000))),
+                    cue("next", startMs = 1_500, variants = listOf(variant("Another one.", 1_000))),
+                ),
+            ),
+            speakerReportsCompletion = false,
+        )
+
+        session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("desc")
+
+        session.playTo(1_500)
+        session.speakerReports(UtteranceId("cue:desc")).speaking
+            .shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+            .cueId shouldBe CueId("next")
+
+        session.history.floorTimeouts().shouldBeEmpty()
+    }
+
+    test("a reactive utterance with no measured length is never timed out") {
+        val session = Session(trackOf(), speakerReportsCompletion = false)
+
+        session.press(vqaAnswer("q1", "A dragon fills the doorway.")).speaking
+            .shouldBeInstanceOf<Speaking.ReactiveUtterance>()
+
+        session.tick(60_000).speaking.shouldBeInstanceOf<Speaking.ReactiveUtterance>().id shouldBe UtteranceId("q1")
+        session.history.floorTimeouts().shouldBeEmpty()
+    }
+
+    test("a measured reactive answer is timed out on the wall clock, not the content timeline") {
+        val session = Session(trackOf(), speakerReportsCompletion = false)
+        session.pause()
+
+        session.press(vqaAnswer("q1", "She is holding a knife.", millis = 800))
+        session.tick(2_700).speaking.shouldBeInstanceOf<Speaking.ReactiveUtterance>()
+
+        val timedOut = session.tick(100)
+        timedOut.speaking shouldBe Speaking.Silent
+        timedOut.floorTimeout shouldBe FloorTimeout(
+            id = UtteranceId("q1"),
+            kind = UtteranceKind.Reactive.VQA_ANSWER,
+            predictedDurationMs = 800,
+            slackMs = DirectorConfig.DEFAULT_SPEECH_TIMEOUT_SLACK_MS,
+            heldForMs = 2_800,
+        )
+    }
+
+    test("the timeout slack must sit outside the guard, or it fires on ordinary jitter") {
+        shouldThrow<IllegalArgumentException> {
+            DirectorConfig(guardMs = 250, speechTimeoutSlackMs = 250)
+        }
     }
 
     test("playback that resumes from a saved position does not report everything behind it as dropped") {

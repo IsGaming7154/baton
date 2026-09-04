@@ -132,14 +132,41 @@ data class DroppedCue(
 )
 
 /**
+ * The floor was taken back from an utterance the speaker never reported finishing.
+ *
+ * This is an anomaly, not a normal ending. The floor is released by the speaker
+ * saying it has stopped; the measured duration is only a backstop against a
+ * speaker that goes quiet -- an audio stall under memory pressure on a 1 GB
+ * device, an engine that drops an utterance, a device that suspends the render
+ * thread. Every one of those is worth seeing, so a release by timeout is
+ * reported rather than folded into the ordinary path.
+ */
+data class FloorTimeout(
+    val id: UtteranceId,
+    val kind: UtteranceKind,
+    /** The length the audio was measured to be, which the speaker did not honour. */
+    val predictedDurationMs: Long,
+    val slackMs: Long,
+    /**
+     * How long the floor was held in the end, on the clock the utterance is timed
+     * against: the content timeline for scheduled speech, the wall clock for reactive.
+     */
+    val heldForMs: Long,
+)
+
+/**
  * The director's entire output for one tick.
  *
  * [drops] are the cues abandoned *on this tick* -- an edge, not a running total.
  * The caller accumulates them; a later slice surfaces them to the viewer, so that
  * a missing description reads as a decision rather than a fault.
+ *
+ * [floorTimeout] is likewise an edge: at most one, because only one utterance can
+ * hold the floor to begin with.
  */
 data class Directive(
     val speaking: Speaking,
     val contentDuck: ContentDuck,
     val drops: List<DroppedCue> = emptyList(),
+    val floorTimeout: FloorTimeout? = null,
 )
