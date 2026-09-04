@@ -1,0 +1,47 @@
+{
+  "drafts": [
+    {
+      "gapStartMs": 0,
+      "candidates": [
+        "A young woman kneels beside a smoking fire, her scarred hands wrapped in cloth.",
+        "A young woman kneels beside a low, smoking fire.",
+        "A woman kneels beside a fire."
+      ]
+    },
+    {
+      "gapStartMs": 13000,
+      "candidates": [
+        "He turns the blade over, watching the firelight.",
+        "He turns the blade over.",
+        "He weighs it.",
+        "He hesitates."
+      ]
+    },
+    {
+      "gapStartMs": 21000,
+      "candidates": [
+        "The old man draws a circle in the ash with one finger.",
+        "The old man draws a circle in the ash.",
+        "He draws a circle in the ash."
+      ]
+    },
+    {
+      "gapStartMs": 27000,
+      "candidates": [
+        "Snow drives across the ridge as she pulls the hood over her face.",
+        "Snow drives across the ridge as she covers her face.",
+        "Snow drives across the ridge behind her.",
+        "Snow crosses the ridge."
+      ]
+    },
+    {
+      "gapStartMs": 34000,
+      "candidates": [
+        "The dragon lifts from the cliff face and turns above the valley before it climbs.",
+        "The dragon lifts from the cliff and turns above the valley.",
+        "The dragon lifts from the cliff face.",
+        "The dragon climbs away."
+      ]
+    }
+  ]
+}

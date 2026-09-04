@@ -1,0 +1,118 @@
+{
+    "formatVersion": 1,
+    "sourceId": "sintel-clip",
+    "locale": "en-US",
+    "synthetic": true,
+    "gapMap": [
+        {
+            "startMs": 0,
+            "endMs": 6000
+        },
+        {
+            "startMs": 13000,
+            "endMs": 16000
+        },
+        {
+            "startMs": 21000,
+            "endMs": 23000
+        },
+        {
+            "startMs": 27000,
+            "endMs": 31500
+        },
+        {
+            "startMs": 34000,
+            "endMs": 40000
+        }
+    ],
+    "cues": [
+        {
+            "id": "ad-0",
+            "startMs": 150,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "A young woman kneels beside a smoking fire, her scarred hands wrapped in cloth.",
+                    "measuredDurationMs": 5430,
+                    "audioRef": null
+                },
+                {
+                    "text": "A young woman kneels beside a low, smoking fire.",
+                    "measuredDurationMs": 3612,
+                    "audioRef": null
+                },
+                {
+                    "text": "A woman kneels beside a fire.",
+                    "measuredDurationMs": 2521,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-13000",
+            "startMs": 13150,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "He turns the blade over.",
+                    "measuredDurationMs": 2158,
+                    "audioRef": null
+                },
+                {
+                    "text": "He weighs it.",
+                    "measuredDurationMs": 1430,
+                    "audioRef": null
+                },
+                {
+                    "text": "He hesitates.",
+                    "measuredDurationMs": 1067,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-27000",
+            "startMs": 27150,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "Snow drives across the ridge as she covers her face.",
+                    "measuredDurationMs": 3976,
+                    "audioRef": null
+                },
+                {
+                    "text": "Snow drives across the ridge behind her.",
+                    "measuredDurationMs": 2885,
+                    "audioRef": null
+                },
+                {
+                    "text": "Snow crosses the ridge.",
+                    "measuredDurationMs": 1794,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-34000",
+            "startMs": 34150,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "The dragon lifts from the cliff and turns above the valley.",
+                    "measuredDurationMs": 4339,
+                    "audioRef": null
+                },
+                {
+                    "text": "The dragon lifts from the cliff face.",
+                    "measuredDurationMs": 2885,
+                    "audioRef": null
+                },
+                {
+                    "text": "The dragon climbs away.",
+                    "measuredDurationMs": 1794,
+                    "audioRef": null
+                }
+            ]
+        }
+    ]
+}

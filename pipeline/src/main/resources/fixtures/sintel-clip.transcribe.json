@@ -1,0 +1,445 @@
+{
+  "jobName": "baton-sintel-clip",
+  "accountId": "000000000000",
+  "status": "COMPLETED",
+  "language_code": "en-US",
+  "results": {
+    "transcripts": [
+      {
+        "transcript": "This blade was forged in the north. Where did you find it? The shaman said the dragon would return when we fell. We should be gone before the sun rises. It is already too late."
+      }
+    ],
+    "items": [
+      {
+        "type": "pronunciation",
+        "start_time": "6.000",
+        "end_time": "6.457",
+        "alternatives": [
+          {
+            "content": "This",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "6.507",
+        "end_time": "6.964",
+        "alternatives": [
+          {
+            "content": "blade",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "7.014",
+        "end_time": "7.471",
+        "alternatives": [
+          {
+            "content": "was",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "7.521",
+        "end_time": "7.978",
+        "alternatives": [
+          {
+            "content": "forged",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "8.028",
+        "end_time": "8.485",
+        "alternatives": [
+          {
+            "content": "in",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "8.535",
+        "end_time": "8.992",
+        "alternatives": [
+          {
+            "content": "the",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "9.042",
+        "end_time": "9.500",
+        "alternatives": [
+          {
+            "content": "north",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "punctuation",
+        "alternatives": [
+          {
+            "content": ".",
+            "confidence": "0.0"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "10.200",
+        "end_time": "10.720",
+        "alternatives": [
+          {
+            "content": "Where",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "10.770",
+        "end_time": "11.290",
+        "alternatives": [
+          {
+            "content": "did",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "11.340",
+        "end_time": "11.860",
+        "alternatives": [
+          {
+            "content": "you",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "11.910",
+        "end_time": "12.430",
+        "alternatives": [
+          {
+            "content": "find",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "12.480",
+        "end_time": "13.000",
+        "alternatives": [
+          {
+            "content": "it",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "punctuation",
+        "alternatives": [
+          {
+            "content": "?",
+            "confidence": "0.0"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "16.000",
+        "end_time": "16.435",
+        "alternatives": [
+          {
+            "content": "The",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "16.485",
+        "end_time": "16.920",
+        "alternatives": [
+          {
+            "content": "shaman",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "16.970",
+        "end_time": "17.405",
+        "alternatives": [
+          {
+            "content": "said",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "17.455",
+        "end_time": "17.890",
+        "alternatives": [
+          {
+            "content": "the",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "17.940",
+        "end_time": "18.375",
+        "alternatives": [
+          {
+            "content": "dragon",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "18.625",
+        "end_time": "19.060",
+        "alternatives": [
+          {
+            "content": "would",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "19.110",
+        "end_time": "19.545",
+        "alternatives": [
+          {
+            "content": "return",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "19.595",
+        "end_time": "20.030",
+        "alternatives": [
+          {
+            "content": "when",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "20.080",
+        "end_time": "20.515",
+        "alternatives": [
+          {
+            "content": "we",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "20.565",
+        "end_time": "21.000",
+        "alternatives": [
+          {
+            "content": "fell",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "punctuation",
+        "alternatives": [
+          {
+            "content": ".",
+            "confidence": "0.0"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "23.000",
+        "end_time": "23.456",
+        "alternatives": [
+          {
+            "content": "We",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "23.506",
+        "end_time": "23.962",
+        "alternatives": [
+          {
+            "content": "should",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "24.012",
+        "end_time": "24.468",
+        "alternatives": [
+          {
+            "content": "be",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "24.518",
+        "end_time": "24.974",
+        "alternatives": [
+          {
+            "content": "gone",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "25.024",
+        "end_time": "25.480",
+        "alternatives": [
+          {
+            "content": "before",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "25.530",
+        "end_time": "25.986",
+        "alternatives": [
+          {
+            "content": "the",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "26.036",
+        "end_time": "26.492",
+        "alternatives": [
+          {
+            "content": "sun",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "26.542",
+        "end_time": "27.000",
+        "alternatives": [
+          {
+            "content": "rises",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "punctuation",
+        "alternatives": [
+          {
+            "content": ".",
+            "confidence": "0.0"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "31.500",
+        "end_time": "31.960",
+        "alternatives": [
+          {
+            "content": "It",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "32.010",
+        "end_time": "32.470",
+        "alternatives": [
+          {
+            "content": "is",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "32.520",
+        "end_time": "32.980",
+        "alternatives": [
+          {
+            "content": "already",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "33.030",
+        "end_time": "33.490",
+        "alternatives": [
+          {
+            "content": "too",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "33.540",
+        "end_time": "34.000",
+        "alternatives": [
+          {
+            "content": "late",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "punctuation",
+        "alternatives": [
+          {
+            "content": ".",
+            "confidence": "0.0"
+          }
+        ]
+      }
+    ]
+  }
+}
