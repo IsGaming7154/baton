@@ -149,37 +149,43 @@ Second, and more costly: `tv-foundation` is still published, still resolves, and
 
 ---
 
-## 9. The default text-to-speech engine on Fire TV reports success and produces no audio
+## 9. The good text-to-speech voice is gated behind enabling the screen reader, and fails silently until you do
 
 **Severity:** high
 **Area:** Fire OS text-to-speech / device provisioning
 
-**What was attempted.** Speak a line of text from a third-party application on a Fire TV Stick (AFTSSS, Fire OS 7.7.1.5, Android 9 / API 28), using the standard Android `TextToSpeech` API.
+**What was attempted.** Speak a line of text from a third-party application on a Fire TV Stick (AFTSSS, Fire OS 7.7.1.5, Android 9 / API 28, 900 MB RAM), using the standard Android `TextToSpeech` API.
 
-**What happened.** Two engines are installed and enabled, both declaring `android.intent.action.TTS_SERVICE`:
+**What happened.** Two engines are installed and enabled, both declaring `android.intent.action.TTS_SERVICE`. IVONA is the platform default, and on a device where VoiceView has never been switched on it is a shell with no voice data:
 
-| engine | `onInit` | voices | languages | `synthesizeToFile` | audio |
+| state | engine | `onInit` | voices | `synthesizeToFile` | audio produced |
 |---|---|---|---|---|---|
-| `com.ivona.tts.oem` *(platform default)* | `SUCCESS` | 0 | 0 | returns `SUCCESS` | **none** |
-| `com.svox.pico` | `SUCCESS` | 11 | 11 | returns `SUCCESS` | 4648 ms, 16 kHz mono |
+| VoiceView never enabled | `com.ivona.tts.oem` *(default)* | `SUCCESS` | 0 | returns `SUCCESS` | **none** |
+| VoiceView never enabled | `com.svox.pico` | `SUCCESS` | 11 | returns `SUCCESS` | 4648 ms, 16 kHz |
+| VoiceView enabled | `com.ivona.tts.oem` | `SUCCESS` | 1 (`kajal`, en-IN) | returns `SUCCESS` | 3730 ms, 24 kHz |
+| VoiceView enabled, then **disabled** | `com.ivona.tts.oem` | `SUCCESS` | 1 (`kajal`, en-IN) | returns `SUCCESS` | 3730 ms, 24 kHz |
 
-IVONA is the value returned by `getDefaultEngine()`, so the ordinary two-argument constructor — `TextToSpeech(context, listener)`, the form in every tutorial — resolves to it. Every synchronous signal reports a healthy engine. `onInit` returns `SUCCESS`. `synthesizeToFile` returns `SUCCESS`. The failure arrives later, asynchronously, through the **deprecated** `onError(utteranceId)` callback, carrying no error code. An application that checks return values and does not implement the obsolete overload of an optional listener observes nothing wrong and produces silence.
+Three distinct problems are visible in that table.
 
-**Root cause.** `IvonaTTS.apk` contains no voice data. Voices are installed as separate extension packages, fetched on demand by `com.ivona.orchestrator` (`com.ivona.tts.INSTALL_VOICE_EXTENSION`, `GetBestVoiceForDownloadJobService`, `com.ivona.orchestrator.action.BEST_VOICE_FOR_DOWNLOAD`). On a device where VoiceView has never been enabled, no extension is ever fetched, and the default engine is a shell that binds and answers `SUCCESS` to everything. By contrast SVOX Pico ships 6.1 MB of voice data in `/system/tts/lang_pico` and works immediately.
+**First, the default engine fails silently.** IVONA is what `getDefaultEngine()` returns, so the ordinary two-argument constructor — `TextToSpeech(context, listener)`, the form in every tutorial — resolves to it. Every synchronous signal reports a healthy engine. `onInit` returns `SUCCESS`. `synthesizeToFile` returns `SUCCESS`. The failure arrives later, asynchronously, through the **deprecated** `onError(utteranceId)` callback, carrying no error code. An application that checks return values and does not implement the obsolete overload of an optional listener observes nothing wrong and produces silence. `IvonaTTS.apk` contains no voice data; voices are fetched on demand by `com.ivona.orchestrator` (`INSTALL_VOICE_EXTENSION`, `GetBestVoiceForDownloadJobService`). By contrast SVOX Pico ships 6.1 MB of voice data in `/system/tts/lang_pico` and works from first boot.
 
-**Workaround.** Never take the default engine. Enumerate `TextToSpeech.getEngines()`, name a candidate explicitly in the three-argument constructor, and treat an engine reporting zero voices as unavailable regardless of its init status. Implement both `onError` overloads, including the deprecated one, because on this path only the deprecated one fires.
+**Second, the provisioning trigger is enabling the screen reader.** Nothing else we could find causes a voice to be fetched. Enabling VoiceView provisions one — here `kajal`, matching the device's en-IN locale — and the voice then **persists after VoiceView is switched off again**. So it is a one-time unlock, not a runtime dependency. Which means the quality of speech a third-party application can produce depends on whether the user has, at some point in the life of the device, turned on a service they may have no reason to touch. Two identical Fire TV Sticks running identical software will give the same application different voices, and neither the user nor the developer is told why.
 
-**Why this matters beyond one bug.** The engine that works is a 2010-era formant synthesiser at 16 kHz. The engine that sounds good is IVONA — the same lineage as Amazon Polly, and the voice VoiceView itself speaks with. So the practical position for a third-party developer is that the good voice is present on the device, is the documented default, and cannot be used.
+**Third — and this is the one that costs correctness, not just quality — the two engines disagree about duration by 25%.** The same sentence renders as 3730 ms on IVONA and 4648 ms on Pico: a 918 ms divergence. Any application that measures an utterance with one engine and plays it with another is wrong by nearly a second. For Baton, which admits speech into a gap in the dialogue only when it has measured that the speech fits, 918 ms is roughly four times the guard interval. It is the difference between speaking in silence and speaking over an actor.
 
-There is a further turn. The path that provisions an IVONA voice is enabling VoiceView. But Amazon's own published remedy for simultaneous audio description and screen-reader speech — the defect described in entry 1 of this log — is to *disable* VoiceView. Following the platform's accessibility guidance therefore removes the platform's own high-quality voice from every application on the device, including the accessibility applications that need it most.
+**Workaround.** Never take the default engine. Enumerate `TextToSpeech.getEngines()`, name a candidate explicitly in the three-argument constructor, and treat an engine reporting zero voices as unavailable regardless of what its init status claims. Implement both `onError` overloads, including the deprecated one, because on this path only the deprecated one fires. Never reuse a duration measured on one engine when synthesising on another.
 
-**Feature request.** Two, in order of value:
+**Why this matters beyond one bug.** The engine that works out of the box is a 2010-era formant synthesiser at 16 kHz. The engine that sounds good is IVONA — the same lineage as Amazon Polly, and the voice VoiceView itself speaks with. It is present on every device, it is the documented default, and it is inert until the screen reader has been enabled once.
 
-1. **Make speech synthesis quality available to third-party applications without requiring a screen reader to be enabled.** Either provision a default IVONA voice at first boot, or expose Amazon's synthesis to applications directly. An accessibility application on Fire TV should not have to choose between sounding like a satellite navigation unit and depending on a service the platform tells users to switch off.
-2. **Fail loudly.** An engine with zero installed voices should return an error from `onInit` rather than `SUCCESS`. Reporting success and then emitting silence through a deprecated callback is the most expensive possible way to communicate a missing asset.
+There is a further turn, and it lands on this project's thesis. The path that provisions the good voice is enabling VoiceView. But Amazon's own published remedy for simultaneous audio description and screen-reader speech — the defect described in entry 1 of this log — is to *disable* VoiceView. A user who follows Amazon's accessibility guidance to the letter on a fresh device therefore never triggers provisioning, and every application on that device, including the accessibility applications that need it most, is left with the worse voice and no indication that a better one exists.
 
-**How Baton responds.** Scheduled speech — audio description and spoken subtitles, both authored ahead of time — ships as pre-rendered audio referenced by `Variant.audioRef` and never touches the platform engine. Only reactive speech, which cannot be known before the button is pressed, falls back to Pico.
+**Feature request.** Three, in order of value:
 
+1. **Provision a default IVONA voice at first boot**, independent of whether the screen reader is ever enabled. The voice data is small, the download already exists, and the current trigger couples an unrelated user choice to the speech quality of every application on the device.
+2. **Fail loudly.** An engine with zero installed voices should return an error from `onInit` rather than `SUCCESS`, and `synthesizeToFile` should not return `SUCCESS` for an utterance it cannot render. Reporting success and then emitting silence through a deprecated callback is the most expensive possible way to communicate a missing asset.
+3. **Expose the provisioning state.** If the good voice is going to remain gated, give applications a supported way to ask whether it is available and a supported way to request it, so an application can explain the situation to the user instead of silently sounding worse.
+
+**How Baton responds.** Scheduled speech — audio description and spoken subtitles, both authored ahead of time — ships as pre-rendered audio referenced by `Variant.audioRef` and never touches the platform engine, which also removes the cross-engine duration divergence from the correctness path entirely. Reactive speech, which cannot be known before the button is pressed, selects an engine at runtime: IVONA when it reports a usable voice, Pico otherwise. Because the failure is silent, engine selection validates by voice count rather than by init status.
 
 ---
 
