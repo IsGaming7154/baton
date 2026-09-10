@@ -14,6 +14,17 @@ import java.util.concurrent.atomic.AtomicLong
  * Plays a rendered WAV through an [AudioTrack] and reports when the last frame
  * has actually left for the speaker.
  *
+ * ## MODE_STATIC, not a stream
+ *
+ * The whole file is already read into memory before anything is handed to the
+ * track ([WavAudio.readPcm]), so there is nothing to gain by feeding it out in
+ * periodic chunks and a real risk in doing so: a chunked writer competes for the
+ * CPU with whatever else is running -- ExoPlayer decoding the film concurrently,
+ * on a 1 GB device -- and a writer that loses that race for even one chunk
+ * starves the track mid-utterance. `MODE_STATIC` loads the entire buffer before
+ * `play()` is ever called, so there is no periodic feed left to starve: an
+ * underrun here is not merely unlikely, it is structurally impossible.
+ *
  * ## Why the end is observed rather than timed
  *
  * The director releases the floor on this report, so it has to mean "the audio
@@ -23,10 +34,23 @@ import java.util.concurrent.atomic.AtomicLong
  * to the next voice while the current one is still in the room.
  *
  * So the end is taken from [AudioTrack.getPlaybackHeadPosition], which counts
- * frames the hardware has consumed. A tail of silence is appended so that the
- * real frames drain while the track is still running -- the head position is
- * documented to reset on `stop()`, and a signal that resets at the moment you
- * want to read it is not a signal.
+ * frames the hardware has consumed. Under `MODE_STREAM` this needed a tail of
+ * silence behind the real frames, so that the track was never left running with
+ * nothing queued -- an underrun state some implementations reset the head
+ * position on, which would have made the very signal this class waits for
+ * disappear at the moment it mattered. `MODE_STATIC` has no such state: the
+ * buffer that was loaded is the buffer that plays, start to finish, and the head
+ * position simply holds at the frame count once it gets there. No tail needed.
+ *
+ * ## Being cut off is a first-class ending
+ *
+ * The other way an utterance ends is that the director takes the floor back --
+ * because the silence it was speaking into has run out, or because this class
+ * stopped reporting. `stop(id)` is that instruction, and it is honoured by
+ * bumping the generation, which both ends the poll loop and cancels a job the
+ * executor has not reached yet. Nothing is reported through `onSpeechEnded` on
+ * that path: the caller decided it, so telling it back would be an echo, and the
+ * poll loop exits before the report for exactly that reason.
  *
  * ## No audio focus, deliberately
  *
@@ -47,6 +71,19 @@ class RenderedAudioSpeaker(
     /** Bumped on every speak and stop, so a late writer knows it has been superseded. */
     private val generation = AtomicLong(0)
 
+    /**
+     * What the last accepted [speak] was for, so that an addressed [stop] can tell
+     * whether it is about the utterance in the room or one already gone.
+     *
+     * Set on the caller's thread and not on the executor, because the caller can
+     * withdraw an utterance in the same turn it started one -- before the worker
+     * has picked the job up -- and a field the worker owned would still be empty
+     * at that point, which would read as "nothing of that name is playing" and let
+     * the withdrawal fall on the floor.
+     */
+    @Volatile
+    private var speaking: UtteranceId? = null
+
     @Volatile
     private var track: AudioTrack? = null
 
@@ -56,6 +93,7 @@ class RenderedAudioSpeaker(
             log("speech refused id=${utterance.id} reason=no-rendered-audio")
             return
         }
+        speaking = utterance.id
         val mine = generation.incrementAndGet()
         executor.execute {
             runCatching { play(mine, utterance.id, File(audioRef)) }
@@ -63,14 +101,29 @@ class RenderedAudioSpeaker(
         }
     }
 
-    override fun stop() {
-        generation.incrementAndGet()
-        executor.execute { discardTrack() }
+    override fun stop(id: UtteranceId) {
+        if (speaking != id) return
+        speaking = null
+        silence()
     }
 
     override fun release() {
-        stop()
+        speaking = null
+        silence()
         executor.shutdown()
+    }
+
+    /**
+     * Cut whatever this speaker is doing, unconditionally.
+     *
+     * The generation bump is what actually stops the audio: it ends the poll loop
+     * in [play] and tells a job that has not started yet that it has been
+     * superseded, so an utterance withdrawn between `speak` and its first frame
+     * never becomes audible at all.
+     */
+    private fun silence() {
+        generation.incrementAndGet()
+        executor.execute { discardTrack() }
     }
 
     private fun play(mine: Long, id: UtteranceId, file: File) {
@@ -89,11 +142,13 @@ class RenderedAudioSpeaker(
             log("speech failed id=$id file=${file.name} error=$it")
             return
         }
+        if (pcm.isEmpty()) {
+            log("speech refused id=$id reason=empty-pcm")
+            return
+        }
 
         val channelMask =
             if (wav.channelCount == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
-        val minBytes = AudioTrack.getMinBufferSize(wav.sampleRateHz, channelMask, AudioFormat.ENCODING_PCM_16BIT)
-        val bufferBytes = maxOf(minBytes, wav.bytesPerFrame * wav.sampleRateHz / 4)
 
         val audioTrack = AudioTrack.Builder()
             .setAudioAttributes(
@@ -109,21 +164,19 @@ class RenderedAudioSpeaker(
                     .setChannelMask(channelMask)
                     .build(),
             )
-            .setBufferSizeInBytes(bufferBytes)
-            .setTransferMode(AudioTrack.MODE_STREAM)
+            .setBufferSizeInBytes(pcm.size)
+            .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
         track = audioTrack
 
-        val startedAtMs = System.currentTimeMillis()
-        audioTrack.play()
-        log(
-            "speech started id=$id file=${file.name} frames=${wav.frameCount} " +
-                "rate=${wav.sampleRateHz} channels=${wav.channelCount}",
-        )
+        if (generation.get() != mine) {
+            discardTrack()
+            return
+        }
 
         var offset = 0
-        while (offset < pcm.size && generation.get() == mine) {
-            val written = audioTrack.write(pcm, offset, minOf(CHUNK_BYTES, pcm.size - offset))
+        while (offset < pcm.size) {
+            val written = audioTrack.write(pcm, offset, pcm.size - offset)
             if (written <= 0) {
                 log("speech failed id=$id reason=write-returned-$written")
                 discardTrack()
@@ -132,15 +185,17 @@ class RenderedAudioSpeaker(
             offset += written
         }
 
-        // Silence behind the real frames, so the last of them is consumed while
-        // the track is still playing and the head position stays readable.
-        val tail = ByteArray(wav.bytesPerFrame * (wav.sampleRateHz / 5))
-        var tailOffset = 0
-        while (tailOffset < tail.size && generation.get() == mine) {
-            val written = audioTrack.write(tail, tailOffset, tail.size - tailOffset)
-            if (written <= 0) break
-            tailOffset += written
+        if (generation.get() != mine) {
+            discardTrack()
+            return
         }
+
+        val startedAtMs = System.currentTimeMillis()
+        audioTrack.play()
+        log(
+            "speech started id=$id file=${file.name} frames=${wav.frameCount} " +
+                "rate=${wav.sampleRateHz} channels=${wav.channelCount}",
+        )
 
         val target = wav.frameCount.toInt()
         while (generation.get() == mine) {
@@ -149,11 +204,16 @@ class RenderedAudioSpeaker(
             Thread.sleep(POLL_MS)
         }
 
+        log("speech underrunCount id=$id count=${runCatching { audioTrack.underrunCount }.getOrDefault(-1)}")
         if (generation.get() != mine) {
             discardTrack()
             return
         }
         discardTrack()
+        // Cleared before the report and not after it, so that a stop() arriving
+        // for this id between the two finds nothing to silence -- which is the
+        // truth: the last frame has already gone.
+        speaking = null
         log("speech ended id=$id afterMs=${System.currentTimeMillis() - startedAtMs}")
         onSpeechEnded?.invoke(id)
     }
@@ -172,7 +232,6 @@ class RenderedAudioSpeaker(
     }
 
     private companion object {
-        const val CHUNK_BYTES = 8 * 1024
         const val POLL_MS = 10L
     }
 }

@@ -52,6 +52,7 @@ class TtsSpeechSynth private constructor(
     private val outputDir: File,
     val localeUsed: Locale?,
     val probes: List<EngineProbe>,
+    private val log: (String) -> Unit,
 ) : SpeechSynth {
 
     private val pending = HashMap<String, CountDownLatch>()
@@ -94,6 +95,12 @@ class TtsSpeechSynth private constructor(
         val failure = synchronized(pending) { failures.remove(key) }
         check(failure == null) { "$engineId failed to render '$key': $failure" }
         check(file.length() > 0) { "$engineId reported success for '$key' and wrote no audio" }
+
+        // Before the file is measured, not after: the chain preserves frame
+        // count, but measuring first would mean the number the director trusts
+        // came off a different file from the one played, which is the whole
+        // thing this class exists to prevent.
+        SpeechClarity.apply(file, log = log)
 
         val wav = WavAudio.read(file)
         check(wav.frameCount > 0) { "$engineId wrote a header and no frames for '$key'" }
@@ -182,7 +189,7 @@ class TtsSpeechSynth private constructor(
                     }
 
                     log("engine selected $packageName locale=${locale.toLanguageTag()}")
-                    return TtsSpeechSynth(engine, packageName, outputDir, locale, probes)
+                    return TtsSpeechSynth(engine, packageName, outputDir, locale, probes, log)
                 } catch (t: Throwable) {
                     probes += EngineProbe(packageName, TextToSpeech.ERROR, 0, 0, t.toString())
                     tts?.shutdown()
