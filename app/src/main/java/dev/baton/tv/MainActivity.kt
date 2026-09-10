@@ -81,7 +81,17 @@ class MainActivity : ComponentActivity() {
                     // The processor that is not ducking is the one that meters:
                     // it sees the content's own samples before any gain is
                     // applied to them. See DuckingAudioProcessor.
-                    programmeLoudness = player.sampleLevelGain,
+                    //
+                    // Listening tests: `--ez staticDuck true` never measures, so
+                    // the director falls back to the static duck -- the "before"
+                    // half of an adaptive A/B on the same scene.
+                    programmeLoudness = if (intent.getBooleanExtra("staticDuck", false)) {
+                        object : dev.baton.ports.ProgrammeLoudness {
+                            override fun shortTermLufs(): Double? = null
+                        }
+                    } else {
+                        player.sampleLevelGain
+                    },
                     speaker = audioSpeaker,
                     director = AudioDirector(prepared.track, DirectorConfig()),
                     log = ::log,
@@ -91,8 +101,16 @@ class MainActivity : ComponentActivity() {
                 running.start()
             }
 
+            // Listening tests: `am start ... --el seekMs 39000 --el playForMs 9500`
+            // plays one snippet and stops, so a single cue can be heard on its own.
+            // Leave six seconds before the cue -- the meter resets on a seek and a
+            // cue that arrives before it refills is ducked by the static fallback.
+            val seekMs = intent.getLongExtra("seekMs", 0L)
+            if (seekMs > 0L) player.exoPlayer.seekTo(seekMs)
             log("playback starting")
             player.play()
+            val playForMs = intent.getLongExtra("playForMs", 0L)
+            if (playForMs > 0L) handler.postDelayed({ player.exoPlayer.playWhenReady = false }, playForMs)
         }
     }
 

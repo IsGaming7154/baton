@@ -274,7 +274,7 @@ The feature request writes itself, because Amazon has already built it. `@amazon
 | Demo clip: −24.0 LUFS integrated, LRA 13.9 LU | `ffmpeg -af ebur128` |
 | −23.0 / −33.0 LUFS on EBU Tech 3341 signals | `:loudness` tests, run here |
 | 154 ms decision-to-audible for the output-stage duck | Measured on a Fire TV Stick (AFTSSS, Fire OS 7.7.1.5, Android 9 / API 28) |
-| `underrunCount=0` after the move to `MODE_STATIC` | Same device |
+| `underrunCount=0` on both the old `MODE_STREAM` build and `MODE_STATIC` — so it is not evidence for the switch: a static track always reports 0 (`StaticAudioTrackClientProxy::getUnderrunCount`, AOSP `AudioTrackShared.h`) | Same device; Android 9 audio framework source |
 | 918 ms duration divergence between the two installed TTS engines | Same device; friction-log entry 9 |
 | Mix periods 16 / 20 / 32 ms | `dumpsys media.audio_flinger` on the same device; friction-log entry 12 |
 | Meter cross-check −21.751 vs ffmpeg −21.8 LUFS | Friction-log entry 10 |
