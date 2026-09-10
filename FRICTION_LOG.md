@@ -224,4 +224,104 @@ There is a further turn, and it lands on this project's thesis. The path that pr
 
 ---
 
+## 10. An application cannot find out how loud the content it is playing is
+
+**Severity:** high — it forces every well-behaved application to reimplement a broadcast standard
+**Area:** Fire OS media framework (API 28)
+
+**What was attempted.** Duck the content by a defensible amount. The dip that makes description intelligible is not a fixed number of decibels; it is whatever holds the narration a constant loudness difference above the bed, so it depends on how loud the bed currently is. That requires measuring the programme's loudness — ITU-R BS.1770 — while it plays.
+
+**What happened.** There is no route to that measurement on API 28. Every candidate fails for a different reason:
+
+- **`LoudnessEnhancer`** (API 19) is an effect, not a meter. Its entire public surface is `setTargetGain()` / `getTargetGain()`. It changes audio; it never reports it.
+- **`MediaFormat.KEY_AAC_DRC_OUTPUT_LOUDNESS`** is the readback key, and it **arrives at API 30**. Confirmed by diffing the field list across tagged AOSP releases of `frameworks/base/media/java/android/media/MediaFormat.java`: absent in `android-9.0.0_r36` (API 28) and `android-10.0.0_r41` (API 29), present in `android-11.0.0_r1` (API 30). At API 28 only the *input* DRC keys exist — `KEY_AAC_DRC_TARGET_REFERENCE_LEVEL`, `_BOOST_FACTOR`, `_ATTENUATION_FACTOR`, `_HEAVY_COMPRESSION`. You may tell the decoder how to apply DRC. You may not read back what it measured. Even at API 30 it is AAC-only, quantised to 0.25 LKFS steps, and returns `-1` when the bitstream carries no MPEG-D DRC metadata — the common case for a film master.
+- **`LoudnessCodecController`** is **API 35** and `@FlaggedApi` besides — seven major versions above this device — and is a CTA-2075 normalisation applier rather than a meter even where it exists.
+- **`Visualizer`** (API 9) is the only real candidate, and it fails three times over. It requires `android.permission.RECORD_AUDIO` merely to observe audio the application is itself playing. It returns 8-bit unsigned mono samples and an 8-bit magnitude FFT — roughly 48 dB of usable range against BS.1770's −70 LKFS absolute gate, so quantisation noise sits exactly where the gate operates. Android's own class documentation says it plainly: *"It is not an audio recording interface and only returns partial and low quality audio content."*
+
+  On Fire TV it is worse than inadequate — it is structurally blind on the two paths that matter most. Under Widevine L1, decrypted PCM is routed through the SoC's Trusted Execution Environment into secure ION heaps that user space cannot address at all. Under HDMI passthrough, what travels the pipeline is an IEC61937 payload of encoded packets, not decoded samples. In both cases a visualizer attached to the session returns zeroes.
+
+**Workaround.** Implement ITU-R BS.1770-4 and run it over the decoded PCM inside the render chain, where the application can still see its own samples. Baton's `:loudness` module is that: K-weighting, gated integrated LUFS, a sliding short-term meter, and a 4× polyphase true-peak meter. It is validated against the EBU Tech 3341 compliance signals to their published values (−23.0 and −33.0 LUFS, ±0.1 LU) and cross-checked against `ffmpeg`'s `ebur128` on real decoded content (integrated −21.8 ffmpeg / −21.751 ours; true peak −11.6 dBFS / −11.631 dBTP).
+
+Two costs that are worth naming, because they are the reason this should not be application work. The standard's coefficient table is specified at 48 kHz and nothing on this device runs at 48 kHz — IVONA renders at 24 kHz, Pico at 16 kHz — so the filters must be re-derived from the analogue prototype with a `tan()` prewarp per sample rate. And a mono file measured as stereo reads 3 dB hot, which would have put every rendered utterance at the wrong end of Amazon's own ±2 LU window while every stereo test still passed.
+
+**Feature request.** A **programme loudness meter** on the media session: BS.1770 short-term and integrated loudness for the content the application is currently playing, readable without `RECORD_AUDIO`, and available on the DRM and passthrough paths where the platform is doing the decoding anyway. The platform already has the decoded samples in a place the application cannot reach; it is uniquely positioned to measure them. Note that this gap is **not** closed by Amazon's next-generation audio library — see entry 12 — which fixes the control side of this problem and leaves the measurement side untouched.
+
+---
+
+## 11. The loudness metadata that ships inside the stream is parsed, then thrown away
+
+**Severity:** medium — the number already exists, computed by the people best placed to compute it
+**Area:** AndroidX Media3 / ExoPlayer extractor
+
+**What was attempted.** Before writing a loudness meter from scratch (entry 10), establish whether the content already carries its own loudness. AC-3 and E-AC-3 both do: `dialnorm` is a mandatory five-bit field in every syncframe header, set by the mastering engineer to describe the programme's dialogue level.
+
+**What happened.** The value is in the bitstream, the parser reads right past it, and nothing downstream ever sees it. In `androidx/media`, `libraries/extractor/src/main/java/androidx/media3/extractor/Ac3Util.java`, inside `parseAc3SyncframeInfo` (line 280):
+
+```java
+data.skipBits(5 + 5);   // bsid, dialnorm      (line 331)
+if (data.readBit()) {   // compre
+  data.skipBits(8);     // compr               (line 333)
+}
+if (acmod == 0) {
+  data.skipBits(5);     // dialnorm2           (line 336)
+```
+
+Three loudness-related fields — `dialnorm`, the compression gain word `compr`, and `dialnorm2` for dual-mono — are stepped over by advancing the bit cursor. None is read into a variable, so there is nothing for the returned `SyncFrameInfo` to expose even in principle: it carries `mimeType`, `streamType`, `sampleRate`, `channelCount`, `frameSize`, `sampleCount` and `bitrate`, and no loudness of any kind. The source comments name the fields being discarded, so this is deliberate rather than an oversight.
+
+Nor is there anywhere else to get it. There is no `KEY_AC3_*` or `KEY_EAC3_*` in `MediaFormat` at any API level, and the Fire TV vendor Dolby decoder exposes no private vendor key for it either. Media3 hand-parses this header precisely *because* the platform surfaces nothing — and then discards the one field that would have answered the question.
+
+**Workaround.** None. Measure it yourself, as in entry 10. This is the more frustrating of the two gaps: entry 10 is "the platform will not measure this for you", whereas this is "a mastering engineer already measured it to a published standard and encoded it into the file, and the library reads past it".
+
+**Feature request.** Surface `dialnorm` on `SyncFrameInfo`, and the equivalent loudness metadata for other codecs on `Format`. It costs a field and a few bits of parsing that already happen. Two open issues on `androidx/media` — [#1806](https://github.com/androidx/media/issues/1806) and [#2497](https://github.com/androidx/media/issues/2497) — ask for adjacent loudness support and remain unresolved, so this is not a niche request.
+
+*Verified against the `androidx/media` release branch. Baton pins Media3 1.4.1; the skip is longstanding ExoPlayer code and is not believed to differ, but the exact 1.4.1 tag was not diffed.*
+
+---
+
+## 12. An application cannot duck faster than one mixer buffer — and Amazon's own next-generation audio library agrees it should be able to
+
+**Severity:** high — it puts a broadcast mandate out of reach of any Fire TV application
+**Area:** AudioFlinger / AudioMixer (API 28)
+
+**What was attempted.** Meet Netflix's Audio Description Style Guide, which mandates a ducking attack of **no less than 2 ms and no more than 15 ms**. Longer than 15 ms and the bed is still on its way down when the narrator's first consonant arrives, masking it — the exact failure this product exists to prevent.
+
+**What happened.** The platform cannot deliver it, and the reason is structural rather than a matter of tuning.
+
+`AudioTrack.setVolume` does not reach the mixer when it is called. It packs the gain as a minifloat into the track's shared control block and returns; the only IPC is a `signal()`, and only for offloaded tracks (`frameworks/av`, `media/libaudioclient/AudioTrack.cpp:867-885`). AudioFlinger's mixer thread reads that block **once per mix buffer** in `prepareTracks_l` (`services/audioflinger/Threads.cpp:4414`, `:4561`) and hands the value to `AudioMixer` as `RAMP_VOLUME` (`Threads.cpp:4543`), which interpolates linearly from the previous gain to the new one across the whole of that buffer.
+
+Two consequences follow. Every value written between two of those reads is overwritten before it is ever seen, so ticking the volume faster than the mix period changes nothing audible. And the ramp length is the mixer buffer: `new AudioMixer(mNormalFrameCount, mSampleRate)` (`Threads.cpp:3801`), where `mNormalFrameCount` is clamped between `kMinNormalSinkBufferSizeMs = 20` and `kMaxNormalSinkBufferSizeMs = 24` (`Threads.cpp:135`, `:137`, `:2546-2549`) whenever the fast mixer is compiled in — and it is, `kUseFastMixer = FastMixer_Static` (`Threads.cpp:171`). The clamp only ever scales the buffer *up*, so where the HAL period already exceeds 20 ms it stays there. The application's own track cannot take the fast path either, because `DefaultAudioSink` requests at least 250 ms of PCM.
+
+Measured on the device rather than inferred. `dumpsys media.audio_flinger` on the Fire TV Stick (AFTSSS, Fire OS 7.7.1.5) reports four output threads, all running at 48 kHz:
+
+| Thread | HAL frames | Normal frames | Mix period | FastMixer |
+|---|---|---|---|---|
+| `AudioOut_D` | 768 | 768 | **16 ms** | No |
+| `AudioOut_15` | 480 | **960** | **20 ms** | Yes |
+| `AudioOut_4D` | 1536 | 1536 | **32 ms** | No |
+| `AudioOut_55` (duplicating) | 1536 | 1536 | 32 ms | No |
+
+`AudioOut_15` shows the AOSP clamp working exactly as the source describes: the HAL offers 480 frames (10 ms) and AudioFlinger rounds it up to 960 (20 ms), which is `kMinNormalSinkBufferSizeMs` to the frame. The other threads keep the HAL's own period.
+
+**The shortest mix period available on this device is therefore 16 ms, against a mandated ceiling of 15 ms, and no amount of application-side work closes the gap.** The margin is small, but it is the wrong side of the specification and it is not a number an application can influence.
+
+One honest caveat: `AudioOut_D` at 768 frames is *not* what the AOSP source above would produce — the multiplier branch (`Threads.cpp:2557-2567`) should scale 768 up to 1152 frames (24 ms), since `2 × 768` exceeds `maxNormalFrameCount`. It reports 768. Either that thread is not taking the clamp path, or Fire OS differs from stock AOSP here. This does not change the conclusion — every observed period exceeds 15 ms — but the discrepancy is recorded rather than smoothed over, and which of the four threads a media track actually lands on has not yet been pinned down.
+
+**Workaround.** Command a 10 ms attack and accept that the platform's own ramp — 16 ms at best on this hardware — is what is actually heard. Baton splits attack from release for this — `attackMs = 10`, `releaseMs = 150` — chosen by direction of travel, so a duck that deepens mid-utterance attacks while one returning to unity releases. The release is bounded by the director's own 250 ms guard interval rather than by any platform number. There is one compensation worth recording: because `RAMP_VOLUME` smooths every write across a buffer, no single volume step can click, however large. The platform takes the fine control away and hands back a guarantee of smoothness in its place.
+
+**Feature request.** A ducking API with an explicit, application-supplied ramp duration.
+
+This one requires no speculation about what the API should look like, because **Amazon has already built it.** In `@amazon-devices/keplerscript-audio-lib@2.0.18` — the audio library for Vega OS, Amazon's next-generation device operating system — `dist/AudioPlaybackStream.d.ts:712`:
+
+```typescript
+duckVolumeAsync(mode: Int32, value: Int32, rampDurationMs: Int32): Promise<Int32>;
+```
+
+with `DuckingMode.DB (0)` or `PERCENTAGE (1)`, a `value` documented as `0-144` dB of reduction where `0` unducks, and `rampDurationMs` documented as *"Time in milliseconds to go from current volume to target volume"*. Alongside it, `StreamDuckingPolicy` distinguishes `SYSTEM (0)`, where the platform ducks automatically, from `EXPLICIT (1)` — *"Application must handle ducking"* — set through `builder.setDuckingPolicy(StreamDuckingPolicy.EXPLICIT)`.
+
+That is precisely the surface Baton needs and precisely the surface Fire OS 7 withholds: an application-owned ducking policy, a depth in decibels, and a ramp duration in milliseconds. Baton arrived at the same three primitives independently and had to build them by hand on a platform that offers none of them.
+
+The request for Fire OS is simply that this reach API 28's installed base, which will outlive the migration by years. It is worth noting what Vega does *not* add: there is no loudness, LUFS, or `dialnorm` surface anywhere in that library, so entries 10 and 11 remain open even on the new stack. The control problem is solved there. The measurement problem is not solved anywhere.
+
+---
+
 *Entries are appended as they are encountered. This log is a deliverable, not a postscript.*

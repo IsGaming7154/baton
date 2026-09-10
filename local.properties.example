@@ -1,0 +1,9 @@
+# Copy this file to `local.properties` (which is gitignored) and set sdk.dir to
+# your own Android SDK location. Without it, Gradle fails before it gets far
+# enough to say why.
+
+# Windows
+sdk.dir=C:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
+
+# macOS / Linux
+#sdk.dir=/Users/<you>/Library/Android/sdk
