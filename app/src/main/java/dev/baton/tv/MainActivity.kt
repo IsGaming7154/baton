@@ -78,6 +78,10 @@ class MainActivity : ComponentActivity() {
                 val running = Tracer(
                     clock = player.clock,
                     gain = player.contentGain,
+                    // The processor that is not ducking is the one that meters:
+                    // it sees the content's own samples before any gain is
+                    // applied to them. See DuckingAudioProcessor.
+                    programmeLoudness = player.sampleLevelGain,
                     speaker = audioSpeaker,
                     director = AudioDirector(prepared.track, DirectorConfig()),
                     log = ::log,
@@ -99,11 +103,21 @@ class MainActivity : ComponentActivity() {
      */
     private val heartbeat = object : Runnable {
         override fun run() {
-            val gain = player.contentGain
+            val gain = player.sampleLevelGain
+            val positionMs = player.clock.positionMs()
             log(
-                "state positionMs=${player.clock.positionMs()} playback=${player.clock.playback()} " +
+                "state positionMs=$positionMs playback=${player.clock.playback()} " +
+                    "volume=${"%.4f".format(player.exoPlayer.volume)} " +
                     "gain=${"%.4f".format(gain.appliedGain)} fades=${gain.fadesStarted} " +
-                    "framesProcessed=${gain.framesProcessed}",
+                    "framesProcessed=${gain.framesProcessed} " +
+                    // writtenPositionMs is where the sink's write pointer sits;
+                    // positionMs is where the platform reports as audible right
+                    // now (see PlaybackClock). The gap between them is the
+                    // sink's buffered latency -- the depth the old,
+                    // sample-level duck would have had to travel through, kept
+                    // here as the comparison point for the output-stage duck.
+                    "sinkLatencyMs=${gain.writtenPositionMs() - positionMs} " +
+                    "programmeLufs=${gain.shortTermLufs()?.let { "%.1f".format(it) } ?: "unmeasured"}",
             )
             handler.postDelayed(this, 1_000L)
         }

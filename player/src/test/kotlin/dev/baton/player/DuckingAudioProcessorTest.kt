@@ -5,13 +5,17 @@ import androidx.media3.common.audio.AudioProcessor
 import dev.baton.director.ContentDuck
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.doubles.shouldBeLessThan
 import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.ints.shouldBeLessThanOrEqual
+import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.sin
 
 /**
  * The half of "attenuation fades rather than steps" that can be settled without
@@ -21,6 +25,10 @@ import kotlin.math.abs
  * you get by accident.
  *
  * Whether the result is *audibly* clean is not decidable here and is not claimed.
+ *
+ * The second group covers the loudness meter this processor carries. The one that
+ * matters is the last: the meter must read the content as it arrived, not as this
+ * class left it, or the duck ends up responding to its own output.
  */
 class DuckingAudioProcessorTest : FunSpec({
 
@@ -124,7 +132,91 @@ class DuckingAudioProcessorTest : FunSpec({
             )
         }
     }
+
+    test("written position tracks frames processed at the configured rate") {
+        val processor = configured(sampleRateHz, channels = 1)
+
+        processor.writtenPositionMs() shouldBe 0L
+
+        processor.push(frames = sampleRateHz / 2, sample = fullScale, channels = 1)
+        processor.writtenPositionMs() shouldBe 500L
+    }
+
+    test("written position is zero before the processor has been configured") {
+        DuckingAudioProcessor().writtenPositionMs() shouldBe 0L
+    }
+
+    test("no loudness is reported before there is a full window to measure") {
+        val processor = configured(sampleRateHz, channels = 2)
+
+        processor.shortTermLufs().shouldBeNull()
+
+        processor.pushTone(seconds = 1.0, amplitude = 0.05, channels = 2, rate = sampleRateHz)
+        processor.shortTermLufs().shouldBeNull()
+    }
+
+    test("the meter reports the content's own loudness") {
+        val processor = configured(sampleRateHz, channels = 2)
+
+        processor.pushTone(seconds = 4.0, amplitude = 0.05, channels = 2, rate = sampleRateHz)
+
+        // A 1 kHz sine at 0.05 of full scale is -26.0 dBFS, and for a stereo sine
+        // the BS.1770 reading equals the peak level in dBFS.
+        processor.shortTermLufs()!! shouldBe (-26.0 plusOrMinus 0.2)
+    }
+
+    test("an unconfigured processor has no loudness rather than a zero") {
+        DuckingAudioProcessor().shortTermLufs().shouldBeNull()
+    }
+
+    test("a seek clears the window, because the frames across a cut are not adjacent") {
+        val processor = configured(sampleRateHz, channels = 2)
+        processor.pushTone(seconds = 4.0, amplitude = 0.05, channels = 2, rate = sampleRateHz)
+        processor.shortTermLufs()!! shouldBe (-26.0 plusOrMinus 0.2)
+
+        processor.flush()
+
+        processor.shortTermLufs().shouldBeNull()
+    }
+
+    test("the duck does not feed back into the measurement") {
+        // The loop this prevents: a duck lowers the bed, the meter reads the
+        // lowered bed as quieter, a quieter bed asks for a shallower duck, and the
+        // level walks to somewhere nobody chose. The meter reads the input, so a
+        // processor ducking by 19 dB must measure exactly what an open one does.
+        val open = configured(sampleRateHz, channels = 2)
+        val ducked = configured(sampleRateHz, channels = 2)
+        ducked.apply(ContentDuck.Ducked(-19.0))
+
+        open.pushTone(seconds = 4.0, amplitude = 0.05, channels = 2, rate = sampleRateHz)
+        ducked.pushTone(seconds = 4.0, amplitude = 0.05, channels = 2, rate = sampleRateHz)
+
+        ducked.shortTermLufs()!! shouldBe (open.shortTermLufs()!! plusOrMinus 0.01)
+    }
 })
+
+/**
+ * Feed a 1 kHz sine. A constant sample cannot be used here: K-weighting opens
+ * with a high-pass at 38 Hz, so direct current measures as silence however large
+ * it is.
+ */
+private fun DuckingAudioProcessor.pushTone(seconds: Double, amplitude: Double, channels: Int, rate: Int) {
+    val frames = (rate * seconds).toInt()
+    val chunk = rate / 10
+    var written = 0
+    while (written < frames) {
+        val count = minOf(chunk, frames - written)
+        val input = ByteBuffer.allocateDirect(count * channels * 2).order(ByteOrder.nativeOrder())
+        for (i in 0 until count) {
+            val v = (amplitude * sin(2.0 * PI * 1_000.0 * (written + i) / rate) * 32767.0).toInt().toShort()
+            repeat(channels) { input.putShort(v) }
+        }
+        input.flip()
+        queueInput(input)
+        while (getOutput().hasRemaining()) Unit
+        written += count
+    }
+}
 
 private fun configured(sampleRateHz: Int, channels: Int): DuckingAudioProcessor =
     DuckingAudioProcessor().apply {

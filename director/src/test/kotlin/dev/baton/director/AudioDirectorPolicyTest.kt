@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 
@@ -389,16 +390,16 @@ class AudioDirectorPolicyTest : FunSpec({
         val overrunning = session.playTo(2_500)
         overrunning.speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("desc")
         overrunning.contentDuck shouldBe ContentDuck.Ducked(-12.0)
-        session.history.floorTimeouts().shouldBeEmpty()
+        session.history.withdrawals().shouldBeEmpty()
 
         // And it is the speaker, not the clock, that ends it.
         val released = session.speakerReports(UtteranceId("cue:desc"))
         released.speaking shouldBe Speaking.Silent
         released.contentDuck shouldBe ContentDuck.Unity
-        released.floorTimeout shouldBe null
+        released.withdrawal shouldBe null
     }
 
-    test("a speaker that never reports has the floor taken back, and the timeout is recorded") {
+    test("a speaker that never reports has the floor taken back, and the withdrawal is recorded") {
         val session = Session(
             trackOf(
                 gaps = listOf(Gap(0, 20_000)),
@@ -410,22 +411,174 @@ class AudioDirectorPolicyTest : FunSpec({
         session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
         session.playTo(3_900).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
 
-        // Measured length ran out at 2000; the slack runs out at 4000.
-        val timedOut = session.playTo(4_000)
-        timedOut.speaking shouldBe Speaking.Silent
-        timedOut.contentDuck shouldBe ContentDuck.Unity
-        timedOut.floorTimeout shouldBe FloorTimeout(
-            id = UtteranceId("cue:desc"),
-            kind = UtteranceKind.Scheduled.AUDIO_DESCRIPTION,
-            predictedDurationMs = 1_000,
-            slackMs = DirectorConfig.DEFAULT_SPEECH_TIMEOUT_SLACK_MS,
-            heldForMs = 3_000,
+        // Measured length ran out at 2000; the slack runs out at 4000, and there is
+        // eighteen seconds of silence left, so it is our patience that expires here
+        // and not the gap. Nothing was cut: the audio was over, the speaker was
+        // simply never heard from about it.
+        val withdrawn = session.playTo(4_000)
+        withdrawn.speaking shouldBe Speaking.Withdrawn(
+            Withdrawal(
+                id = UtteranceId("cue:desc"),
+                kind = UtteranceKind.Scheduled.AUDIO_DESCRIPTION,
+                reason = WithdrawalReason.SpeakerOverdue(DirectorConfig.DEFAULT_SPEECH_TIMEOUT_SLACK_MS),
+                measuredDurationMs = 1_000,
+                heldForMs = 3_000,
+            ),
         )
+        withdrawn.contentDuck shouldBe ContentDuck.Unity
 
         // Reported once, and the cue does not come back for a second try.
         session.playTo(8_000)
-        session.history.floorTimeouts() shouldHaveSize 1
+        session.history.withdrawals() shouldHaveSize 1
         session.history.spokenCueIds() shouldBe listOf(CueId("desc"))
+    }
+
+    // -----------------------------------------------------------------------
+    // Withdrawal: the director can say stop.
+    //
+    // The decision these tests encode is that a clipped description is the
+    // cheaper artefact. A cut costs the tail of one sentence and arrives with a
+    // number saying how much; an overrun costs the line of dialogue underneath
+    // it and arrives looking like success. See the AudioDirector class doc.
+    // -----------------------------------------------------------------------
+
+    test("a description that overruns its gap is stopped at the dialogue, not merely reported") {
+        val session = Session(
+            trackOf(
+                // A two-second gap, and a cue that wants three quarters of it.
+                gaps = listOf(Gap(1_000, 3_000)),
+                cues = listOf(cue("desc", startMs = 1_000, variants = listOf(variant("A dragon lands.", 1_500)))),
+            ),
+            speakerReportsCompletion = false,
+        )
+
+        session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("desc")
+
+        // The old flat slack put the deadline at 4500 -- a second and a half past
+        // the dialogue onset at 3000, every millisecond of it audible over an
+        // actor, and then a clean-looking release. The window is the deadline now.
+        session.playTo(2_950).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+
+        val withdrawn = session.playTo(3_000)
+        withdrawn.speaking shouldBe Speaking.Withdrawn(
+            Withdrawal(
+                id = UtteranceId("cue:desc"),
+                kind = UtteranceKind.Scheduled.AUDIO_DESCRIPTION,
+                reason = WithdrawalReason.OutOfSilence(windowEndMs = 3_000),
+                measuredDurationMs = 1_500,
+                // Held 2000 for a 1500 ms utterance: it was cut 500 ms past its own
+                // length, which is the only part of it a cut can ever reach.
+                heldForMs = 2_000,
+            ),
+        )
+        withdrawn.contentDuck shouldBe ContentDuck.Unity
+    }
+
+    test("a withdrawal never cuts into the length the cue was admitted on, only into its overrun") {
+        // The guarantee behind choosing truncation. A cue is admitted only if its
+        // measured length plus the guard fits the window, so the window deadline
+        // cannot arrive before the measured end -- whatever a cut takes, the
+        // utterance had already promised to be finished with it.
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(0, 3_000), Gap(4_000, 7_000), Gap(8_000, 30_000)),
+                cues = listOf(
+                    cue("a", startMs = 500, variants = listOf(variant("One.", 2_200))),
+                    cue("b", startMs = 4_100, variants = listOf(variant("Two.", 2_600))),
+                    cue("c", startMs = 8_100, variants = listOf(variant("Three.", 1_000))),
+                ),
+            ),
+            speakerReportsCompletion = false,
+        )
+        session.playTo(20_000, stepMs = 50)
+
+        session.history.withdrawals().forEach { withdrawal ->
+            withdrawal.measuredDurationMs.shouldNotBeNull()
+            (withdrawal.heldForMs >= withdrawal.measuredDurationMs!!) shouldBe true
+        }
+        session.history.withdrawals() shouldHaveSize 3
+    }
+
+    test("the deadline comes from the granted window, so the same cue in a longer gap is not cut") {
+        // Same cue, same speaker, same failure to report. The only difference is
+        // how much silence the film offered -- which is the whole claim: the
+        // deadline is a fact about the gap and not a constant.
+        fun sessionWithGapEnding(windowEndMs: Long) = Session(
+            trackOf(
+                gaps = listOf(Gap(1_000, windowEndMs)),
+                cues = listOf(cue("desc", startMs = 1_000, variants = listOf(variant("A dragon lands.", 1_500)))),
+            ),
+            speakerReportsCompletion = false,
+        )
+
+        val tight = sessionWithGapEnding(3_000)
+        tight.playTo(3_000)
+        tight.history.withdrawals().single().reason shouldBe WithdrawalReason.OutOfSilence(windowEndMs = 3_000)
+
+        val roomy = sessionWithGapEnding(20_000)
+        roomy.playTo(3_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        roomy.history.withdrawals().shouldBeEmpty()
+
+        // It is still bounded, just by the weaker of the two deadlines: measured
+        // length at 2500, plus the slack.
+        roomy.playTo(4_500).speaking shouldBe Speaking.Withdrawn(
+            Withdrawal(
+                id = UtteranceId("cue:desc"),
+                kind = UtteranceKind.Scheduled.AUDIO_DESCRIPTION,
+                reason = WithdrawalReason.SpeakerOverdue(DirectorConfig.DEFAULT_SPEECH_TIMEOUT_SLACK_MS),
+                measuredDurationMs = 1_500,
+                heldForMs = 3_500,
+            ),
+        )
+    }
+
+    test("the tick that withdraws the floor starts nothing, so no voice begins on top of one being cut") {
+        val session = Session(
+            trackOf(
+                // Two windows with a sliver of dialogue between them, so that the
+                // description's window ends while the next one's is already open.
+                gaps = listOf(Gap(1_000, 3_000), Gap(3_050, 9_000)),
+                cues = listOf(
+                    cue("desc", startMs = 1_000, variants = listOf(variant("A dragon lands.", 1_500))),
+                    cue("next", startMs = 3_050, variants = listOf(variant("It breathes fire.", 1_000))),
+                ),
+            ),
+            speakerReportsCompletion = false,
+        )
+
+        session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("desc")
+
+        // At 3100 the description is past the end of its window and "next" is
+        // comfortably inside its own, so it would take the floor the instant it is
+        // free. It does not get it on this tick: a directive that carries a
+        // withdrawal has nowhere left to put an utterance, and the speaker has
+        // this moment been told to stop and has not done so yet.
+        val withdrawn = session.tick(2_100)
+        withdrawn.speaking.shouldBeInstanceOf<Speaking.Withdrawn>()
+            .withdrawal.reason shouldBe WithdrawalReason.OutOfSilence(windowEndMs = 3_000)
+        withdrawn.drops.shouldBeEmpty()
+
+        // On the following tick, with the floor genuinely empty, it starts.
+        session.tick(50).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("next")
+    }
+
+    test("a scheduled utterance that cannot be constructed inside its window is not a runtime problem") {
+        // The withdrawal path never has to cope with an utterance that was doomed
+        // on admission, because there is no way to make one.
+        shouldThrow<IllegalArgumentException> {
+            Speaking.ScheduledUtterance(
+                id = UtteranceId("cue:impossible"),
+                kind = UtteranceKind.Scheduled.AUDIO_DESCRIPTION,
+                text = "Too long for the room it was given.",
+                audioRef = null,
+                startedAtMs = 0,
+                cueId = CueId("impossible"),
+                variantIndex = 0,
+                duration = measuredMs(3_000),
+                startedAtPositionMs = 1_000,
+                windowEndMs = 2_000,
+            )
+        }
     }
 
     test("a speaker reporting on time is not an anomaly") {
@@ -441,16 +594,27 @@ class AudioDirectorPolicyTest : FunSpec({
 
         session.playTo(9_000)
         session.history.spokenCueIds() shouldBe listOf(CueId("a"), CueId("b"))
-        session.history.floorTimeouts().shouldBeEmpty()
+        session.history.withdrawals().shouldBeEmpty()
     }
 
     test("a speaker that finishes early releases the floor early") {
+        // The two cues share a start time, which is the only way one can be
+        // waiting on the floor while the other is still speaking. Two cues at
+        // *different* points in one window reserve room from each other, so the
+        // second is not due until the first has finished and there would be no
+        // handover to watch. Same beat, two voices, one of them ranked higher --
+        // see CueRooms on why that case is left to the arbitration.
         val session = Session(
             trackOf(
                 gaps = listOf(Gap(0, 20_000)),
                 cues = listOf(
-                    cue("desc", startMs = 1_000, variants = listOf(variant("A long description.", 4_000))),
-                    cue("next", startMs = 1_500, variants = listOf(variant("Another one.", 1_000))),
+                    cue(
+                        "desc",
+                        startMs = 1_000,
+                        kind = UtteranceKind.Scheduled.SPOKEN_SUBTITLE,
+                        variants = listOf(variant("A long description.", 4_000)),
+                    ),
+                    cue("next", startMs = 1_000, variants = listOf(variant("Another one.", 1_000))),
                 ),
             ),
             speakerReportsCompletion = false,
@@ -463,40 +627,288 @@ class AudioDirectorPolicyTest : FunSpec({
             .shouldBeInstanceOf<Speaking.ScheduledUtterance>()
             .cueId shouldBe CueId("next")
 
-        session.history.floorTimeouts().shouldBeEmpty()
+        session.history.withdrawals().shouldBeEmpty()
     }
 
-    test("a reactive utterance with no measured length is never timed out") {
+    test("a speaker that never reports on unmeasured speech cannot wedge the floor") {
+        // The FRICTION_LOG entry 9 failure, stated as a policy: an engine that
+        // returns success and emits nothing. There is no measured length to be
+        // late against, so before the ceiling existed this held the floor -- and
+        // the duck under it -- for the rest of the film.
         val session = Session(trackOf(), speakerReportsCompletion = false)
+        val ceilingMs = session.config.unmeasuredSpeechCeilingMs
 
         session.press(vqaAnswer("q1", "A dragon fills the doorway.")).speaking
             .shouldBeInstanceOf<Speaking.ReactiveUtterance>()
 
-        session.tick(60_000).speaking.shouldBeInstanceOf<Speaking.ReactiveUtterance>().id shouldBe UtteranceId("q1")
-        session.history.floorTimeouts().shouldBeEmpty()
+        // Held right up to the ceiling, because a long answer is a legitimate
+        // answer and the viewer asked for it.
+        session.tick(ceilingMs - 1).speaking
+            .shouldBeInstanceOf<Speaking.ReactiveUtterance>().id shouldBe UtteranceId("q1")
+
+        val withdrawn = session.tick(1)
+        withdrawn.speaking shouldBe Speaking.Withdrawn(
+            Withdrawal(
+                id = UtteranceId("q1"),
+                kind = UtteranceKind.Reactive.VQA_ANSWER,
+                reason = WithdrawalReason.NeverMeasured(ceilingMs = ceilingMs),
+                measuredDurationMs = null,
+                heldForMs = ceilingMs,
+            ),
+        )
+
+        // And the film comes back, which is the point: the failure being recovered
+        // from is a permanently ducked bed under a voice that never arrived.
+        withdrawn.contentDuck shouldBe ContentDuck.Unity
+        session.tick(60_000).speaking shouldBe Speaking.Silent
     }
 
-    test("a measured reactive answer is timed out on the wall clock, not the content timeline") {
+    test("a measured reactive answer is withdrawn on the wall clock, not the content timeline") {
         val session = Session(trackOf(), speakerReportsCompletion = false)
         session.pause()
 
         session.press(vqaAnswer("q1", "She is holding a knife.", millis = 800))
         session.tick(2_700).speaking.shouldBeInstanceOf<Speaking.ReactiveUtterance>()
 
-        val timedOut = session.tick(100)
-        timedOut.speaking shouldBe Speaking.Silent
-        timedOut.floorTimeout shouldBe FloorTimeout(
-            id = UtteranceId("q1"),
-            kind = UtteranceKind.Reactive.VQA_ANSWER,
-            predictedDurationMs = 800,
-            slackMs = DirectorConfig.DEFAULT_SPEECH_TIMEOUT_SLACK_MS,
-            heldForMs = 2_800,
+        val withdrawn = session.tick(100)
+        withdrawn.speaking shouldBe Speaking.Withdrawn(
+            Withdrawal(
+                id = UtteranceId("q1"),
+                kind = UtteranceKind.Reactive.VQA_ANSWER,
+                reason = WithdrawalReason.SpeakerOverdue(DirectorConfig.DEFAULT_SPEECH_TIMEOUT_SLACK_MS),
+                measuredDurationMs = 800,
+                heldForMs = 2_800,
+            ),
         )
     }
 
     test("the timeout slack must sit outside the guard, or it fires on ordinary jitter") {
         shouldThrow<IllegalArgumentException> {
             DirectorConfig(guardMs = 250, speechTimeoutSlackMs = 250)
+        }
+    }
+
+    test("the unmeasured ceiling must sit outside the slack, or unmeasured speech is judged harder") {
+        shouldThrow<IllegalArgumentException> {
+            DirectorConfig(speechTimeoutSlackMs = 2_000, unmeasuredSpeechCeilingMs = 2_000)
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // A stall is not a pause.
+    //
+    // The first two tests are the same track, the same cue and the same moment,
+    // and differ in exactly one input. That is the point of them: the difference
+    // between a description delivered and a description cut in half is which of
+    // the two the director was told, so the pair has to be read together.
+    // -----------------------------------------------------------------------
+
+    test("a stall mid-description holds the floor, and the cue is still speaking when frames return") {
+        val session = Session(stallScenario())
+
+        val started = session.playTo(1_500).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        started.cueId shouldBe CueId("desc")
+
+        // The stream runs dry. Nobody decided anything, so nothing is given up:
+        // the same utterance instance is still named, which is what stops the
+        // player from calling stop() on a sentence that is halfway out.
+        val stalled = session.stall()
+        val holding = stalled.speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        holding.id shouldBe started.id
+        holding.startedAtMs shouldBe started.startedAtMs
+
+        // And the duck holds with it, so the film does not come back up under a
+        // narrator who never stopped talking.
+        stalled.contentDuck shouldBe ContentDuck.Ducked(DirectorConfig.DEFAULT_DUCK_DB)
+
+        // Time passes on the wall clock while the content stands still.
+        session.tick(400)
+        session.positionMs shouldBe 1_500
+
+        val resumed = session.resume().speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        resumed.id shouldBe started.id
+        resumed.startedAtMs shouldBe started.startedAtMs
+
+        // Nothing is owed to a cue that was held rather than stopped: it plays
+        // out the once and is not started again on the way out of the stall.
+        session.playTo(4_500)
+        session.history.spokenCueIds() shouldBe listOf(CueId("desc"))
+    }
+
+    test("a user pause mid-description clears the floor, and the cue does not re-speak on resume") {
+        val session = Session(stallScenario())
+
+        session.playTo(1_500).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("desc")
+
+        val paused = session.pause()
+        paused.speaking shouldBe Speaking.Silent
+        paused.contentDuck shouldBe ContentDuck.Unity
+
+        session.tick(400)
+        session.resume().speaking shouldBe Speaking.Silent
+
+        // It had its gap. The viewer stopped watching the scene it describes, and
+        // hearing it again from the top would describe a moment already gone.
+        session.playTo(4_500).speaking shouldBe Speaking.Silent
+        session.history.spokenCueIds() shouldBe listOf(CueId("desc"))
+        session.history.stalls().shouldBeEmpty()
+    }
+
+    test("a pause during a stall still stops the speech: a decision outranks an interruption") {
+        val session = Session(stallScenario())
+        session.playTo(1_500).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+
+        session.stall().speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+
+        // The viewer reaches for the button while the picture is frozen. They have
+        // still decided to stop, and the stall they decided it during does not
+        // make the decision any less theirs.
+        val paused = session.pause()
+        paused.speaking shouldBe Speaking.Silent
+        paused.contentDuck shouldBe ContentDuck.Unity
+    }
+
+    test("the schedule does not advance while the content is stalled, and resumes when frames do") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(0, 20_000)),
+                cues = listOf(cue("b", startMs = 1_500, variants = listOf(variant("Snow covers the road.", 1_000)))),
+            ),
+        )
+        session.playTo(1_400).speaking shouldBe Speaking.Silent
+
+        // Ten seconds of wall clock and not one millisecond of film. A cue is
+        // eligible on the content timeline, so a frozen timeline schedules
+        // nothing -- admitting one here would be admitting it against a stopped
+        // clock.
+        session.stall()
+        session.tick(10_000).speaking shouldBe Speaking.Silent
+        session.positionMs shouldBe 1_400
+
+        session.resume()
+        session.playTo(1_500).speaking
+            .shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+            .cueId shouldBe CueId("b")
+    }
+
+    test("a stall shorter than the threshold passes unreported; one longer than it is an anomaly") {
+        val session = Session(trackOf(gaps = listOf(Gap(0, 20_000))))
+        val thresholdMs = session.config.stallAnomalyMs
+        session.playTo(1_000)
+
+        session.stall()
+        session.tick(thresholdMs - 100).stall shouldBe null
+        session.resume().stall shouldBe null
+
+        // The same hiccup, held a little longer.
+        session.stall()
+        session.tick(thresholdMs - 100).stall shouldBe null
+        val reported = session.tick(200).stall.shouldNotBeNull()
+        reported.atPositionMs shouldBe 1_000
+        reported.stalledForMs shouldBe thresholdMs + 100
+        reported.thresholdMs shouldBe thresholdMs
+        reported.floorHeldBy shouldBe null
+
+        // Once, not once per tick: the second tick of the same stall is not news.
+        session.tick(30_000).stall shouldBe null
+        session.history.stalls() shouldHaveSize 1
+    }
+
+    test("a stall that crosses the threshold mid-description names the utterance it ran under") {
+        val session = Session(stallScenario())
+        val started = session.playTo(1_500).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+
+        session.stall()
+        val directive = session.tick(session.config.stallAnomalyMs + 500)
+
+        val reported = directive.stall.shouldNotBeNull()
+        reported.floorHeldBy shouldBe started.id
+        reported.atPositionMs shouldBe 1_500
+
+        // Reporting it is not the same as giving up on it. The director says what
+        // it saw and goes on holding the floor.
+        directive.speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().id shouldBe started.id
+        directive.contentDuck shouldBe ContentDuck.Ducked(DirectorConfig.DEFAULT_DUCK_DB)
+    }
+
+    test("buffering before anything has played is not a stall and is not reported") {
+        val session = Session(trackOf(gaps = listOf(Gap(0, 20_000))))
+
+        // The player exists but is not moving, and then starts filling its buffer:
+        // the shape of a cold start from a network source. Nothing has been
+        // interrupted, so there is nothing to report -- and an anomaly that fired
+        // on every launch would stop being read.
+        session.pause()
+        session.stall()
+        session.tick(30_000).stall shouldBe null
+        session.history.stalls().shouldBeEmpty()
+    }
+
+    test("a stall freezes the window deadline with the dialogue it protects against") {
+        // A tight window: the description is granted 900 ms and uses 600 of it, so
+        // its content deadline sits 900 ms after it starts.
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(1_000, 1_900)),
+                cues = listOf(cue("desc", startMs = 1_000, variants = listOf(variant("A gate.", 600)))),
+            ),
+        )
+        val started = session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+
+        // The stream runs dry for 1200 ms -- a third longer than the deadline is
+        // from the start of the utterance. A deadline that ran on the wall clock
+        // would cut the sentence here, to protect it from a line of dialogue that
+        // cannot arrive, because the picture that would carry it is frozen. That
+        // is the artefact the stall work removed, and it stays removed.
+        session.stall()
+        val held = session.tick(1_200)
+        held.speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().startedAtMs shouldBe started.startedAtMs
+        session.positionMs shouldBe 1_000
+
+        // Frames return, the sentence finishes of its own accord, nothing was cut.
+        session.resume()
+        session.playTo(1_700).speaking shouldBe Speaking.Silent
+        session.history.withdrawals().shouldBeEmpty()
+        session.history.spokenCueIds() shouldBe listOf(CueId("desc"))
+    }
+
+    test("a stall cannot wedge the floor: the wall-clock ceiling runs through it") {
+        // The other half of the same decision. The window deadline is frozen with
+        // the content and can never be reached here, because the position never
+        // moves again -- so if the ceiling froze too, this speaker would hold the
+        // floor and the duck for as long as the network stayed away.
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(0, 60_000)),
+                cues = listOf(cue("desc", startMs = 1_000, variants = listOf(variant("A gate swings shut.", 1_000)))),
+            ),
+            speakerReportsCompletion = false,
+        )
+        session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+
+        session.stall()
+        session.tick(2_900).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+
+        // A correct speaker would have reported long ago: this utterance's audio
+        // plays from a local file that did not stall when the video did, so it ran
+        // out on the wall clock at 2000 whatever the buffer was doing.
+        val withdrawn = session.tick(100)
+        withdrawn.speaking shouldBe Speaking.Withdrawn(
+            Withdrawal(
+                id = UtteranceId("cue:desc"),
+                kind = UtteranceKind.Scheduled.AUDIO_DESCRIPTION,
+                reason = WithdrawalReason.SpeakerOverdue(DirectorConfig.DEFAULT_SPEECH_TIMEOUT_SLACK_MS),
+                measuredDurationMs = 1_000,
+                heldForMs = 3_000,
+            ),
+        )
+        withdrawn.contentDuck shouldBe ContentDuck.Unity
+        session.positionMs shouldBe 1_000
+    }
+
+    test("a stall threshold inside the guard is rejected: the guard already absorbs that much") {
+        shouldThrow<IllegalArgumentException> {
+            DirectorConfig(guardMs = 250, stallAnomalyMs = 250)
         }
     }
 
@@ -514,3 +926,13 @@ class AudioDirectorPolicyTest : FunSpec({
         session.history.spokenCueIds().shouldBeEmpty()
     }
 })
+
+/**
+ * One description, comfortably inside a long silence, three seconds long and due
+ * at a second in. Shared by the stall tests so that the only thing separating
+ * them is the input under examination.
+ */
+private fun stallScenario(): DescriptionTrack = trackOf(
+    gaps = listOf(Gap(0, 20_000)),
+    cues = listOf(cue("desc", startMs = 1_000, variants = listOf(variant("A dragon lands.", 3_000)))),
+)

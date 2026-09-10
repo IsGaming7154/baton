@@ -52,7 +52,7 @@ fun vqaAnswer(id: String, text: String = "A dragon fills the doorway.", millis: 
  * end of an utterance from its length -- it waits to be told. A well-behaved
  * speaker reports the moment the audio it was handed has run out, which is what
  * [speakerReportsCompletion] models. Set it false to get a speaker that goes
- * silent and never reports, which is the failure the timeout backstop exists for.
+ * silent and never reports, which is the failure the deadlines exist for.
  *
  * The tests below only ever look at the [Directive] values this returns. Nothing
  * here reaches into the director.
@@ -105,6 +105,17 @@ class Session(
         return advance()
     }
 
+    /**
+     * The stream ran dry. Deliberately not [pause]: the content stops moving
+     * either way, and the entire point is that the director is told which of the
+     * two it is looking at rather than left to guess.
+     */
+    fun stall(): Directive {
+        playback = Playback.STALLED
+        return advance()
+    }
+
+    /** Frames again, from either a [pause] or a [stall]. */
     fun resume(): Directive {
         playback = Playback.PLAYING
         return advance()
@@ -152,4 +163,6 @@ fun List<Directive>.spokenCueIds(): List<CueId> =
 
 fun List<Directive>.allDrops(): List<DroppedCue> = flatMap { it.drops }
 
-fun List<Directive>.floorTimeouts(): List<FloorTimeout> = mapNotNull { it.floorTimeout }
+fun List<Directive>.withdrawals(): List<Withdrawal> = mapNotNull { it.withdrawal }
+
+fun List<Directive>.stalls(): List<PlaybackStall> = mapNotNull { it.stall }

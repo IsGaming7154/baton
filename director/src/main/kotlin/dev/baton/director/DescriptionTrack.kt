@@ -78,6 +78,15 @@ data class Variant(
  *
  * [variants] are ordered longest first. The director walks them in order and
  * takes the first that fits, which is therefore the longest that fits.
+ *
+ * That walk is the only thing this type enforces about the variants, and it is
+ * deliberately not the only thing that is true of them. The pipeline additionally
+ * refuses to author two variants whose lengths sit closer together than the
+ * runtime could act on -- see `PipelineConfig.variantSeparationMs` -- but that is
+ * an authoring rule and not a structural one. Making it a `require` here would
+ * mean this runtime rejects a track built by an older pipeline, on an editorial
+ * complaint, at the moment a viewer pressed play; a variant that is merely
+ * redundant costs nothing at play time, because the walk simply never reaches it.
  */
 data class Cue(
     val id: CueId,
@@ -159,6 +168,72 @@ class SilenceWindows private constructor(val windows: List<Gap>) {
 }
 
 /**
+ * Where each cue's room stops, which is not the same question as where its silence
+ * stops.
+ *
+ * While a window held one description the two questions had one answer, and
+ * [SilenceWindows] gave it. They come apart the moment a window can hold several.
+ * A thirty-second gap with four cues written into it, arbitrated against the end
+ * of the window, is a gap with *one* description in it: the first cue takes the
+ * longest variant that fits the whole remaining silence, and the three behind it
+ * find nothing left. Nothing downstream can see that this went wrong, either --
+ * the utterance ended inside the silence, so every rule was kept. The quantity was
+ * simply the wrong one. What is left of the window is not what a cue may have;
+ * what is left *before the next cue* is.
+ *
+ * Derived once, when the track is constructed, rather than looked for on each
+ * tick. The arbitration already walks the cue list once per tick, and hunting for
+ * the next cue in the same window inside that walk would make it quadratic on a
+ * device with 1 GB of memory to spend. The stronger reason is that the answer
+ * cannot change while the track is loaded: it is a property of the track, and it
+ * belongs beside [DescriptionTrack.silence], which is there for the same reason.
+ *
+ * **Cues sharing a start time do not reserve room from each other.** They are two
+ * voices contesting one moment, not two moments in one window, and which of them
+ * speaks is a question the arbitration answers at play time against a floor that
+ * may or may not be free -- the loser then takes what is left of the window, which
+ * is the behaviour a spoken subtitle and a description sharing a beat have always
+ * had. Reserving between them would starve both for a conflict that resolves
+ * itself.
+ */
+class CueRooms private constructor(private val roomEndByCueId: Map<CueId, Long>) {
+
+    /**
+     * The content position past which [cueId]'s room belongs to something else --
+     * the next cue written into the same silence window, or, when it is the last
+     * one there, the dialogue that closes the window.
+     *
+     * Null when the cue does not start inside a window at all. That is the same
+     * condition [SilenceWindows.windowEndAt] answers null to, and it stays a
+     * separate refusal rather than being folded in here: a cue written over
+     * dialogue is a fault in the track, and the drop it earns says so.
+     */
+    fun roomEndFor(cueId: CueId): Long? = roomEndByCueId[cueId]
+
+    companion object {
+        fun of(cues: List<Cue>, silence: SilenceWindows): CueRooms {
+            // Normalized windows are disjoint, so a window's end identifies it --
+            // which is what lets the cues be grouped by a single lookup each
+            // rather than by searching the window list per pair.
+            val byWindowEnd = mutableMapOf<Long, MutableList<Cue>>()
+            for (cue in cues) {
+                val windowEndMs = silence.windowEndAt(cue.startMs) ?: continue
+                byWindowEnd.getOrPut(windowEndMs) { mutableListOf() } += cue
+            }
+
+            val roomEnds = mutableMapOf<CueId, Long>()
+            for ((windowEndMs, inWindow) in byWindowEnd) {
+                val startsMs = inWindow.map { it.startMs }.distinct().sorted()
+                for (cue in inWindow) {
+                    roomEnds[cue.id] = startsMs.firstOrNull { it > cue.startMs } ?: windowEndMs
+                }
+            }
+            return CueRooms(roomEnds)
+        }
+    }
+}
+
+/**
  * The contract between the offline pipeline and the runtime.
  *
  * [synthetic] is load-bearing rather than decorative: the app reads it to decide
@@ -183,6 +258,9 @@ data class DescriptionTrack(
 
     /** The gap map, normalized for lookup. Derived; not part of the serialized form. */
     val silence: SilenceWindows = SilenceWindows.of(gapMap)
+
+    /** Where each cue's room stops. Derived; not part of the serialized form. */
+    val rooms: CueRooms = CueRooms.of(cues, silence)
 
     companion object {
         const val CURRENT_FORMAT_VERSION: Int = 1

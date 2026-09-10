@@ -2,8 +2,10 @@ package dev.baton.player
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
@@ -22,20 +24,79 @@ import dev.baton.ports.PlaybackClock
  *
  * Every method here must be called on the thread that built the player, which is
  * ExoPlayer's rule and not ours.
+ *
+ * ## Two duck implementations, one active
+ *
+ * [sampleLevelGain] is always installed in the sink's processor chain, so
+ * [DuckingAudioProcessor.writtenPositionMs] keeps measuring the sink's queue
+ * depth regardless of which implementation is ducking. But it sits upstream of
+ * that queue -- several hundred milliseconds deep on the Fire TV Stick -- so a
+ * duck applied there is inaudible for most of a second. [contentGain] is the
+ * active one: [OutputStageContentGain], which applies at `ExoPlayer.setVolume`,
+ * after the queue rather than before it. [sampleLevelGain] stays wired into the
+ * chain, at unity, as the fallback if the output-stage ticker's steps turn out
+ * to be audible -- switching back is choosing which field callers are handed,
+ * not rewriting anything.
  */
+@OptIn(UnstableApi::class)
 class BatonPlayer(context: Context, log: (String) -> Unit = {}) {
 
-    /** The [ContentGain] port. Also the audio processor that implements it. */
-    val contentGain: DuckingAudioProcessor = DuckingAudioProcessor(log = log)
+    /**
+     * The sample-accurate duck, always in the render chain for its
+     * [DuckingAudioProcessor.writtenPositionMs] measurement, but left at unity
+     * unless it is the one selected as [contentGain].
+     */
+    val sampleLevelGain: DuckingAudioProcessor = DuckingAudioProcessor(log = log)
 
-    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory(context, contentGain)).build()
+    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory(context, sampleLevelGain)).build()
+
+    /** The active [ContentGain]: the output-stage duck. See the class doc. */
+    val contentGain: ContentGain = OutputStageContentGain(exoPlayer, exoPlayer.applicationLooper, log = log)
 
     val clock: PlaybackClock = object : PlaybackClock {
         override fun positionMs(): Long = exoPlayer.currentPosition.coerceAtLeast(0L)
 
-        // Buffering is not playing: the content position is not advancing, so a
-        // cue admitted on it would be admitted against a clock that has stopped.
-        override fun playback(): Playback = if (exoPlayer.isPlaying) Playback.PLAYING else Playback.PAUSED
+        /**
+         * Buffering is not playing -- the content position is not advancing, so a
+         * cue admitted on it would be admitted against a clock that has stopped --
+         * but it is not a pause either, and this is the one place in the system
+         * that can tell the difference.
+         *
+         * `Player.isPlaying` cannot. It is defined as `playbackState ==
+         * STATE_READY && playWhenReady && playbackSuppressionReason ==
+         * PLAYBACK_SUPPRESSION_REASON_NONE` (media3-common 1.4.1,
+         * `BasePlayer.isPlaying`): a conjunction of three facts that answers "is
+         * the position advancing" and then throws away which of the three failed.
+         * The branches below are that conjunction pulled back apart, in the order
+         * `Player.isPlaying`'s own contract lists the ways it can be false.
+         *
+         * What makes the answer trustworthy is that Media3 keeps intention and
+         * readiness apart on purpose. `playWhenReady` is the intention, and every
+         * reason it is allowed to change is somebody deciding something --
+         * `PLAY_WHEN_READY_CHANGE_REASON_` `USER_REQUEST`, `AUDIO_FOCUS_LOSS`,
+         * `AUDIO_BECOMING_NOISY`, `REMOTE`, `END_OF_MEDIA_ITEM`,
+         * `SUPPRESSED_TOO_LONG` (1.4.1). Running out of buffer is not on that
+         * list, and cannot be: it moves `playbackState` and leaves the intention
+         * exactly where the viewer left it. So "wants to play, cannot yet" is
+         * directly readable, and the director never has to guess it from timing.
+         *
+         * Suppression is reported as a pause rather than a stall. Transient audio
+         * focus loss and an unsuitable audio route are both somebody else deciding
+         * the film should stop being heard, and a description that talked through
+         * them would be talking over whatever took the focus -- which is the one
+         * thing this product promises not to do.
+         *
+         * `STATE_IDLE` and `STATE_ENDED` fall through to the same answer. Neither
+         * is an interruption of anything: the first means nothing is loaded yet,
+         * the second that the film is over.
+         */
+        override fun playback(): Playback = when {
+            exoPlayer.isPlaying -> Playback.PLAYING
+            !exoPlayer.playWhenReady -> Playback.PAUSED
+            exoPlayer.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE -> Playback.PAUSED
+            exoPlayer.playbackState == Player.STATE_BUFFERING -> Playback.STALLED
+            else -> Playback.PAUSED
+        }
     }
 
     fun setSource(uri: Uri) {
@@ -67,9 +128,9 @@ class BatonPlayer(context: Context, log: (String) -> Unit = {}) {
     private companion object {
 
         /**
-         * The duck is a `DefaultAudioSink` processor rather than a volume call, so
-         * the fade is applied to the samples themselves. Building the sink by hand
-         * is the only way to get a processor into the chain.
+         * [sampleLevelGain] rides in the sink's processor chain even while it is
+         * not the active duck, for its `writtenPositionMs` measurement. Building
+         * the sink by hand is the only way to get a processor into the chain.
          */
         fun renderersFactory(context: Context, gain: DuckingAudioProcessor): DefaultRenderersFactory =
             object : DefaultRenderersFactory(context) {

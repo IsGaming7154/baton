@@ -23,7 +23,12 @@ internal sealed interface Seek {
 
 internal class Step(
     val dtMs: Long,
-    val playing: Boolean,
+    /**
+     * Deliberately three-valued. A stall is not a pause, and a generator that only
+     * produced two of the three would leave the invariants holding over a state
+     * the product now spends real time in every time a stream hiccups.
+     */
+    val playback: Playback,
     val seek: Seek?,
     val reactives: List<ReactiveRequest>,
     val reactiveBeforeSeek: Boolean,
@@ -199,7 +204,11 @@ private fun randomSteps(random: Random): List<Step> = List(random.nextInt(8, 90)
             6 -> random.between(1, 40)
             else -> 100L
         },
-        playing = random.nextInt(14) != 0,
+        playback = when (random.nextInt(12)) {
+            0 -> Playback.PAUSED
+            1 -> Playback.STALLED
+            else -> Playback.PLAYING
+        },
         seek = when {
             random.nextInt(14) != 0 -> null
             random.nextBoolean() -> Seek.Back(random.between(500, 5_000))

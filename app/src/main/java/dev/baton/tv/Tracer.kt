@@ -11,6 +11,7 @@ import dev.baton.director.InputEvent
 import dev.baton.director.Speaking
 import dev.baton.ports.ContentGain
 import dev.baton.ports.PlaybackClock
+import dev.baton.ports.ProgrammeLoudness
 import dev.baton.ports.Speaker
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -34,6 +35,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 class Tracer(
     private val clock: PlaybackClock,
     private val gain: ContentGain,
+    private val programmeLoudness: ProgrammeLoudness,
     private val speaker: Speaker,
     private val director: AudioDirector,
     private val log: (String) -> Unit,
@@ -65,7 +67,8 @@ class Tracer(
     fun stop() {
         running = false
         handler.removeCallbacks(tick)
-        speaker.stop()
+        speaking?.let { speaker.stop(it.id) }
+        speaking = null
         gain.apply(ContentDuck.Unity)
     }
 
@@ -83,23 +86,43 @@ class Tracer(
 
         val positionMs = clock.positionMs()
         val playback = clock.playback()
+        val programmeLufs = programmeLoudness.shortTermLufs()
         val directive = director.advance(
             SystemClock.elapsedRealtime(),
-            DirectorInputs(positionMs = positionMs, playback = playback, events = events),
+            DirectorInputs(
+                positionMs = positionMs,
+                playback = playback,
+                events = events,
+                programmeLufs = programmeLufs,
+            ),
         )
 
         directive.drops.forEach {
             log("cue dropped id=${it.cueId} kind=${it.kind} atPositionMs=${it.atPositionMs} reason=${it.reason}")
         }
-        directive.floorTimeout?.let {
+        // Logged with both numbers rather than one, because the pair is the price
+        // of the policy: heldForMs against measuredMs is how far past its own
+        // length the utterance had run when it was cut, and a policy whose price
+        // never reaches the log is one nobody can argue with afterwards.
+        directive.withdrawal?.let {
             log(
-                "ANOMALY floor released by timeout id=${it.id} kind=${it.kind} " +
-                    "predictedMs=${it.predictedDurationMs} slackMs=${it.slackMs} heldForMs=${it.heldForMs}",
+                "ANOMALY floor withdrawn id=${it.id} kind=${it.kind} reason=${it.reason} " +
+                    "measuredMs=${it.measuredDurationMs ?: "unmeasured"} heldForMs=${it.heldForMs}",
+            )
+        }
+        // Nothing is done about it -- the floor and the duck are held, which is
+        // the director's decision and not this loop's. The line exists so that a
+        // description heard over a frozen picture is legible afterwards as the
+        // network event it was.
+        directive.stall?.let {
+            log(
+                "ANOMALY content stalled atPositionMs=${it.atPositionMs} stalledForMs=${it.stalledForMs} " +
+                    "thresholdMs=${it.thresholdMs} floorHeldBy=${it.floorHeldBy ?: "nothing"}",
             )
         }
 
         applySpeech(directive, events, positionMs)
-        applyDuck(directive)
+        applyDuck(directive, programmeLufs)
     }
 
     private fun applySpeech(directive: Directive, events: List<InputEvent>, positionMs: Long) {
@@ -111,7 +134,13 @@ class Tracer(
 
         if (current != null) {
             log("floor released id=${current.id} by=${releaseCause(directive, events, current)}")
-            if (next == null) speaker.stop()
+            // Unconditionally, and named. The old shape stopped the speaker only
+            // when nothing followed, which left the one case that matters --
+            // handing the floor straight to another voice -- relying on the
+            // speaker to work out for itself that the previous utterance was over.
+            // A speaker that got that wrong would put two voices in the room, and
+            // this is the loop whose entire job is that it cannot.
+            speaker.stop(current.id)
         }
         if (next != null) {
             if (next is Speaking.ScheduledUtterance) {
@@ -127,16 +156,25 @@ class Tracer(
         speaking = next
     }
 
-    private fun applyDuck(directive: Directive) {
-        if (directive.contentDuck != duck) {
-            duck = directive.contentDuck
-            log("duck target=${duck.db}dB")
-        }
+    /**
+     * The duck depth is logged with the measurement it was computed from, because
+     * on its own a depth is unreadable: -6 dB is either correct or badly wrong
+     * depending on how loud the film was, and the log is the only place that can
+     * be checked after the fact against what was heard in the room.
+     */
+    private fun applyDuck(directive: Directive, programmeLufs: Double?) {
+        // Only on a change. Re-applying an unchanged depth is not free: the gain
+        // reads the player's current volume and starts a fresh ramp from it, so a
+        // tick that says nothing new still restarts the fade.
+        if (directive.contentDuck == duck) return
+        duck = directive.contentDuck
+        val measured = programmeLufs?.let { "%.1f".format(it) } ?: "unmeasured"
+        log("duck target=${"%.1f".format(duck.db)}dB programmeLufs=$measured")
         gain.apply(directive.contentDuck)
     }
 
     private fun releaseCause(directive: Directive, events: List<InputEvent>, held: Speaking.Utterance): String = when {
-        directive.floorTimeout?.id == held.id -> "TIMEOUT"
+        directive.withdrawal?.id == held.id -> "WITHDRAWN"
         events.any { it is InputEvent.SpeechEnded && it.id == held.id } -> "speaker"
         events.any { it is InputEvent.Seeked } -> "seek"
         events.any { it is InputEvent.ReactiveRequested } -> "preempted"

@@ -11,6 +11,13 @@ import dev.baton.director.UtteranceId
  *
  * Two facts rather than one, because a paused player still has a position and
  * the director has to be able to tell the difference.
+ *
+ * [playback] answers with three states and not two, for the same reason there are
+ * two methods here and not one. A player that has run out of data has also
+ * stopped, and an implementation that folded that into "paused" would be telling
+ * the director somebody decided to stop watching -- a claim only the adapter is
+ * in a position to check, and one the director cannot recover from timing. See
+ * [Playback].
  */
 interface PlaybackClock {
     fun positionMs(): Long
@@ -30,10 +37,38 @@ interface ContentGain {
 }
 
 /**
+ * How loud the content itself is, right now.
+ *
+ * The other half of the ducking decision. [ContentGain] is told a number; this
+ * is where the number comes from -- without it the director can only apply a
+ * fixed attenuation and hope the film happens to be at the level that fixed
+ * attenuation was chosen for.
+ *
+ * Deliberately not a `Double`. Null is a real and frequent answer: a loudness
+ * measurement needs a window of audio behind it, so there is nothing to report
+ * for the first few seconds of playback, or for the first few seconds after a
+ * seek. A port that returned a number regardless would be inventing one exactly
+ * when the truth is that nobody knows yet.
+ */
+interface ProgrammeLoudness {
+
+    /**
+     * ITU-R BS.1770 short-term loudness of the content, in LUFS, or null before
+     * there is a complete window to measure.
+     */
+    fun shortTermLufs(): Double?
+}
+
+/**
  * The voice that is not the content's.
  *
  * [speak] is idempotent in the sense the director needs: it is called once per
  * utterance instance, and the caller diffs the directive to decide when that is.
+ *
+ * The pairing is what matters: **every [speak] is ended either by the speaker
+ * reporting through [onSpeechEnded] or by the caller calling [stop], and never by
+ * both and never by neither.** The director decides which, and it can now decide
+ * against an utterance that is still going -- that is what [stop] is for.
  */
 interface Speaker {
 
@@ -49,8 +84,24 @@ interface Speaker {
 
     fun speak(utterance: Speaking.Utterance)
 
-    /** Silence whatever is playing. Does not report an end; the caller already knows. */
-    fun stop()
+    /**
+     * Silence [id] now, if it is what is playing, and do nothing if it is not.
+     *
+     * Addressed, and that is the whole of the change from an unaddressed "stop
+     * whatever is playing". This is how the director withdraws the floor from
+     * speech that has run out of silence, so it is issued about a *particular*
+     * utterance while another may already have been handed over; a bare stop would
+     * be a race that silences the wrong voice, and the wrong voice here is the one
+     * that is allowed to be talking. Naming the target makes the mistake
+     * impossible rather than merely unlikely, and an implementation that has
+     * already moved on can say so by doing nothing.
+     *
+     * Does not report an end. A withdrawal is the caller taking the floor back,
+     * not the speaker giving it up, and the caller already knows -- an
+     * [onSpeechEnded] fired from here would be a calculation dressed as an
+     * observation, which is exactly what that callback may not be.
+     */
+    fun stop(id: UtteranceId)
 
     fun release()
 }
