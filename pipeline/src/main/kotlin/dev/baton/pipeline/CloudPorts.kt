@@ -65,16 +65,27 @@ data class SceneContext(
  * draft we are asking the drafter to beat. Together they are the "and now a
  * shorter one" turn of the conversation, expressed without making the port
  * stateful.
+ *
+ * [cueOrdinal] is the other conversation, and it is a different one: not "say that
+ * again in less time" but "now say what happens next". A silence window holds
+ * several descriptions, and the drafter has to be able to tell the second sentence
+ * of a window from a retry of the first -- they want opposite things from it. The
+ * two counters are kept apart rather than folded into one running total for
+ * exactly that reason; a drafter reading a single number could not tell a fourth
+ * observation from a fourth failed attempt at the first one.
  */
 data class DraftRequest(
     val scene: SceneContext,
     val targetDurationMs: Long,
     val attempt: Int,
+    /** Which description within [SceneContext.gap] this is, counting from zero. */
+    val cueOrdinal: Int = 0,
     val previousText: String? = null,
 ) {
     init {
         require(targetDurationMs > 0) { "a draft target of $targetDurationMs ms asks for nothing" }
         require(attempt >= 0) { "attempt must be >= 0, was $attempt" }
+        require(cueOrdinal >= 0) { "cueOrdinal must be >= 0, was $cueOrdinal" }
     }
 }
 

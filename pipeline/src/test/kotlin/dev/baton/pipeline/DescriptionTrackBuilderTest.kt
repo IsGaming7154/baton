@@ -6,8 +6,11 @@ import dev.baton.director.DescriptionTrackJson
 import dev.baton.director.Gap
 import dev.baton.director.MeasuredDurationMs
 import dev.baton.director.UtteranceKind
+import dev.baton.pipeline.mock.RecordedDrafting
+import dev.baton.pipeline.mock.RecordedTranscription
 import dev.baton.pipeline.mock.SimulatedSynthesis
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
@@ -96,7 +99,17 @@ class DescriptionTrackBuilderTest : FunSpec({
     }
 
     test("every gap the builder looked at is accounted for, as a cue or as a drop") {
-        (track.cues.size + result.drops.size) shouldBe track.gapMap.size
+        // Stated per window rather than by counting, because the counts stopped
+        // agreeing once a window could hold more than one cue. What was actually
+        // being protected is that no window leaves the builder unexplained: it
+        // either has something to say in it, or it has a reason it does not.
+        for (gap in track.gapMap) {
+            val described = track.cues.any { it.startMs >= gap.startMs && it.startMs < gap.endMs }
+            val explained = result.drops.any { it.gap == gap }
+            withClue("gap ${gap.startMs}-${gap.endMs} is neither described nor explained") {
+                (described || explained) shouldBe true
+            }
+        }
     }
 
     test("every emitted variant carries a duration measured off rendered audio") {
@@ -226,6 +239,143 @@ class DescriptionTrackBuilderTest : FunSpec({
             asks.first().scene.precedingDialogue shouldEndWith "Where did you find it"
             asks.first().scene.followingDialogue shouldStartWith "The shaman said the dragon"
             asks.first().scene.media shouldBe Fixtures.media
+        }
+    }
+
+    context("a window long enough for several descriptions") {
+
+        val long = LongGapFixtures.build()
+        val longTrack = long.track
+
+        test("thirty seconds of silence is filled with several cues, not labelled with one") {
+            val inLongGap = longTrack.cues.filter { it.startMs < LongGapFixtures.longGap.endMs }
+            inLongGap.map { it.id } shouldContainExactly listOf(
+                CueId("ad-2000"),
+                CueId("ad-2000-1"),
+                CueId("ad-2000-2"),
+                CueId("ad-2000-3"),
+                CueId("ad-2000-4"),
+                CueId("ad-2000-5"),
+                CueId("ad-2000-6"),
+            )
+            // And the window that can only hold one still only gets one, so the
+            // packing is driven by the room and not by a new appetite for cues.
+            longTrack.cues.filter { it.startMs >= LongGapFixtures.shortGap.startMs }
+                .map { it.id } shouldContainExactly listOf(CueId("ad-34000"))
+        }
+
+        test("the first cue in a window keeps the window's name, so ids survive the change") {
+            longTrack.cues.first().id shouldBe CueId("ad-2000")
+        }
+
+        test("each cue leaves the guard clear before the next one starts") {
+            val guardMs = PipelineConfig().guardMs
+            for ((earlier, later) in longTrack.cues.zipWithNext()) {
+                val longestMs = earlier.variants.first().measuredDuration.millis
+                withClue("${earlier.id} runs into ${later.id}") {
+                    (earlier.startMs + longestMs + guardMs <= later.startMs) shouldBe true
+                }
+            }
+        }
+
+        test("the builder stops when the leftover could not hold a description worth writing") {
+            val last = longTrack.cues.single { it.id == CueId("ad-2000-6") }
+            val leftoverMs = LongGapFixtures.longGap.endMs -
+                (last.startMs + last.variants.first().measuredDuration.millis + PipelineConfig().guardMs)
+            (leftoverMs < PipelineConfig().minimumCueRoomMs) shouldBe true
+
+            // Running out of room is a full window, not a failed one, so nothing
+            // in a window that got seven descriptions is reported as a drop.
+            long.drops.shouldBeEmpty()
+        }
+
+        test("the drafter is asked for a new observation, not a shorter retry, at each new slot") {
+            val recorder = RecordingDrafter(RecordedDrafting.fromResource(LongGapFixtures.DRAFTS_JSON))
+            LongGapFixtures.builder(drafting = recorder).build(LongGapFixtures.request)
+
+            val inLongGap = recorder.asks.filter { it.scene.gap == LongGapFixtures.longGap }
+            inLongGap.map { it.cueOrdinal }.distinct() shouldContainExactly listOf(0, 1, 2, 3, 4, 5, 6)
+            // Each slot runs its own "shorter, please" conversation from zero.
+            inLongGap.filter { it.cueOrdinal == 3 }.map { it.attempt } shouldContainExactly listOf(0, 1, 2)
+            // And the second cue of the window opens holding what the first said.
+            inLongGap.first { it.cueOrdinal == 1 }.previousText shouldBe
+                "She hauls herself over the lip of the ridge and lies flat."
+        }
+
+        test("the runtime speaks every cue in the packed window, and refuses none") {
+            val playthrough = longTrack.playedThrough(LongGapFixtures.MEDIA_DURATION_MS)
+            playthrough.spoken shouldContainExactly longTrack.cues.map { it.id }
+            playthrough.drops.shouldBeEmpty()
+        }
+
+        test("no cue in the packed window is ever heard over dialogue") {
+            // The failure this whole product exists to prevent, checked against
+            // the packing rather than against the window: a cue admitted at the
+            // wrong boundary lands inside the silence and still collides.
+            val dialogue = GapMapper.dialogueSpans(
+                RecordedTranscription.fromResource(LongGapFixtures.TRANSCRIBE_JSON).transcribe(LongGapFixtures.media),
+                LongGapFixtures.MEDIA_DURATION_MS,
+            )
+            for (cue in longTrack.cues) {
+                for (variant in cue.variants) {
+                    val endMs = cue.startMs + variant.measuredDuration.millis
+                    for (span in dialogue) {
+                        withClue("${cue.id} (${cue.startMs}-$endMs) overlaps dialogue $span") {
+                            (endMs <= span.startMs || cue.startMs >= span.endMs) shouldBe true
+                        }
+                    }
+                }
+            }
+        }
+
+        test("golden file") {
+            val golden = File("src/test/resources/golden/long-gap-clip.track.json")
+            val encoded = DescriptionTrackJson.encode(longTrack).replace("\r\n", "\n")
+            if (System.getProperty("baton.updateGolden") == "true") {
+                golden.parentFile.mkdirs()
+                golden.writeText(encoded + "\n")
+            }
+            golden.readText().replace("\r\n", "\n").trimEnd() shouldBe encoded.trimEnd()
+        }
+    }
+
+    context("variants have to differ by more than their wording") {
+
+        /** Three genuinely different sentences that take almost exactly as long to say. */
+        val paraphrases = ScriptedDrafter(
+            "A woman kneels beside a fire.",
+            "A woman crouches beside a fire.",
+            "A woman settles beside a fire.",
+            "She rises and walks away.",
+        )
+
+        test("paraphrases of one length are one option, however differently they are worded") {
+            val built = Fixtures.builder(drafting = paraphrases).build(Fixtures.request)
+            val cue = built.track.cues.single { it.id == CueId("ad-0") }
+
+            // The first three measure 2521, 2521 and 2521 ms. Only one of them can
+            // be the longest that fits any window, so only one of them is a variant.
+            cue.variants.map { it.text } shouldContainExactly listOf(
+                "A woman kneels beside a fire.",
+                "She rises and walks away.",
+            )
+        }
+
+        test("the margin is a number, not a rule buried in the loop") {
+            val generous = Fixtures
+                .builder(PipelineConfig(variantSeparationMs = 800), drafting = Fixtures.drafting())
+                .build(Fixtures.request)
+
+            // ad-13000 authors 2158, 1430 and 1067 ms at the default 250 ms
+            // margin. Widen it to 800 and the middle draft is inside the longest
+            // by 728 ms, so it stops being an option and the shortest -- 1091 ms
+            // clear -- takes its place.
+            generous.track.cues.single { it.id == CueId("ad-13000") }
+                .variants.map { it.measuredDuration.millis } shouldContainExactly listOf(2_158L, 1_067L)
+        }
+
+        test("a margin of zero is a contradiction, since two identical lengths are one option") {
+            shouldThrow<IllegalArgumentException> { PipelineConfig(variantSeparationMs = 0) }
         }
     }
 

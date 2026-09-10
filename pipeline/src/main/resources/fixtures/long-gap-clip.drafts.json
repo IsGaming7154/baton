@@ -1,0 +1,75 @@
+{
+  "drafts": [
+    {
+      "gapStartMs": 2000,
+      "cueOrdinal": 0,
+      "candidates": [
+        "She hauls herself over the lip of the ridge and lies flat.",
+        "She hauls herself over the ridge and stops.",
+        "She drags herself up, breathing."
+      ]
+    },
+    {
+      "gapStartMs": 2000,
+      "cueOrdinal": 1,
+      "candidates": [
+        "Below her, a frozen river cuts between two sheer black cliffs.",
+        "Below her a frozen river cuts through.",
+        "A frozen river below."
+      ]
+    },
+    {
+      "gapStartMs": 2000,
+      "cueOrdinal": 2,
+      "candidates": [
+        "She unwinds the cloth from one hand and presses it to her mouth.",
+        "She unwinds the cloth and covers her mouth again.",
+        "She covers her mouth with cloth."
+      ]
+    },
+    {
+      "gapStartMs": 2000,
+      "cueOrdinal": 3,
+      "candidates": [
+        "The wind lifts a curtain of snow along the ridge.",
+        "The wind lifts a curtain of snow.",
+        "Snow lifts and settles."
+      ]
+    },
+    {
+      "gapStartMs": 2000,
+      "cueOrdinal": 4,
+      "candidates": [
+        "A shadow crosses the snow below, far too large for any bird.",
+        "A wide shadow crosses the snow below her.",
+        "A shadow crosses the snow."
+      ]
+    },
+    {
+      "gapStartMs": 2000,
+      "cueOrdinal": 5,
+      "candidates": [
+        "She flattens against the rock and does not move.",
+        "She flattens against the rock, still.",
+        "She goes still."
+      ]
+    },
+    {
+      "gapStartMs": 2000,
+      "cueOrdinal": 6,
+      "candidates": [
+        "The shadow passes.",
+        "It passes."
+      ]
+    },
+    {
+      "gapStartMs": 34000,
+      "cueOrdinal": 0,
+      "candidates": [
+        "The dragon settles on the far ridge and folds its wings slowly.",
+        "The dragon settles and folds its wings away.",
+        "The dragon folds its wings."
+      ]
+    }
+  ]
+}

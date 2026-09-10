@@ -1,0 +1,189 @@
+{
+    "formatVersion": 1,
+    "sourceId": "long-gap-clip",
+    "locale": "en-US",
+    "synthetic": true,
+    "gapMap": [
+        {
+            "startMs": 2000,
+            "endMs": 32000
+        },
+        {
+            "startMs": 34000,
+            "endMs": 40000
+        }
+    ],
+    "cues": [
+        {
+            "id": "ad-2000",
+            "startMs": 2150,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "She hauls herself over the lip of the ridge and lies flat.",
+                    "measuredDurationMs": 4703,
+                    "audioRef": null
+                },
+                {
+                    "text": "She hauls herself over the ridge and stops.",
+                    "measuredDurationMs": 3249,
+                    "audioRef": null
+                },
+                {
+                    "text": "She drags herself up, breathing.",
+                    "measuredDurationMs": 2158,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-2000-1",
+            "startMs": 7103,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "Below her, a frozen river cuts between two sheer black cliffs.",
+                    "measuredDurationMs": 4339,
+                    "audioRef": null
+                },
+                {
+                    "text": "Below her a frozen river cuts through.",
+                    "measuredDurationMs": 2885,
+                    "audioRef": null
+                },
+                {
+                    "text": "A frozen river below.",
+                    "measuredDurationMs": 1794,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-2000-2",
+            "startMs": 11692,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "She unwinds the cloth from one hand and presses it to her mouth.",
+                    "measuredDurationMs": 5067,
+                    "audioRef": null
+                },
+                {
+                    "text": "She unwinds the cloth and covers her mouth again.",
+                    "measuredDurationMs": 3612,
+                    "audioRef": null
+                },
+                {
+                    "text": "She covers her mouth with cloth.",
+                    "measuredDurationMs": 2521,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-2000-3",
+            "startMs": 17009,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "The wind lifts a curtain of snow along the ridge.",
+                    "measuredDurationMs": 3976,
+                    "audioRef": null
+                },
+                {
+                    "text": "The wind lifts a curtain of snow.",
+                    "measuredDurationMs": 2885,
+                    "audioRef": null
+                },
+                {
+                    "text": "Snow lifts and settles.",
+                    "measuredDurationMs": 1794,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-2000-4",
+            "startMs": 21235,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "A shadow crosses the snow below, far too large for any bird.",
+                    "measuredDurationMs": 4703,
+                    "audioRef": null
+                },
+                {
+                    "text": "A wide shadow crosses the snow below her.",
+                    "measuredDurationMs": 3249,
+                    "audioRef": null
+                },
+                {
+                    "text": "A shadow crosses the snow.",
+                    "measuredDurationMs": 2158,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-2000-5",
+            "startMs": 26188,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "She flattens against the rock and does not move.",
+                    "measuredDurationMs": 3612,
+                    "audioRef": null
+                },
+                {
+                    "text": "She flattens against the rock, still.",
+                    "measuredDurationMs": 2521,
+                    "audioRef": null
+                },
+                {
+                    "text": "She goes still.",
+                    "measuredDurationMs": 1430,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-2000-6",
+            "startMs": 30050,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "The shadow passes.",
+                    "measuredDurationMs": 1430,
+                    "audioRef": null
+                },
+                {
+                    "text": "It passes.",
+                    "measuredDurationMs": 1067,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-34000",
+            "startMs": 34150,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "The dragon settles on the far ridge and folds its wings slowly.",
+                    "measuredDurationMs": 4703,
+                    "audioRef": null
+                },
+                {
+                    "text": "The dragon settles and folds its wings away.",
+                    "measuredDurationMs": 3249,
+                    "audioRef": null
+                },
+                {
+                    "text": "The dragon folds its wings.",
+                    "measuredDurationMs": 2158,
+                    "audioRef": null
+                }
+            ]
+        }
+    ]
+}

@@ -1,61 +1,117 @@
 {
   "formatVersion": 1,
-  "sourceId": "sample-clip",
+  "sourceId": "tears-of-steel-05m24s",
   "locale": "en-US",
   "synthetic": true,
   "gapMap": [
-    { "startMs": 1500, "endMs": 11000 },
-    { "startMs": 11500, "endMs": 21000 },
-    { "startMs": 21500, "endMs": 30000 }
+    { "startMs": 4200, "endMs": 10050 },
+    { "startMs": 12400, "endMs": 14075 },
+    { "startMs": 26200, "endMs": 31800 },
+    { "startMs": 44700, "endMs": 47300 },
+    { "startMs": 69550, "endMs": 71800 },
+    { "startMs": 73200, "endMs": 77950 },
+    { "startMs": 79775, "endMs": 82800 },
+    { "startMs": 87200, "endMs": 89416 }
   ],
   "cues": [
     {
       "id": "d1",
-      "startMs": 2500,
+      "startMs": 5900,
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "A test pattern fills the screen, and a steady tone holds underneath it.",
-          "measuredDurationMs": 4908,
+          "text": "A machine crosses the rooftops.",
+          "measuredDurationMs": 1968,
           "audioRef": null
         },
         {
-          "text": "A test pattern, and a steady tone.",
-          "measuredDurationMs": 3209,
+          "text": "A machine.",
+          "measuredDurationMs": 877,
           "audioRef": null
         }
       ]
     },
     {
       "id": "d2",
-      "startMs": 12500,
+      "startMs": 27000,
       "kind": "SPOKEN_SUBTITLE",
       "variants": [
         {
-          "text": "The reference clip runs for thirty seconds at a constant level.",
-          "measuredDurationMs": 4143,
+          "text": "Celia, I love your robot hand.",
+          "measuredDurationMs": 2332,
           "audioRef": null
         },
         {
-          "text": "Thirty seconds at a constant level.",
-          "measuredDurationMs": 2814,
+          "text": "Your robot hand.",
+          "measuredDurationMs": 1241,
           "audioRef": null
         }
       ]
     },
     {
       "id": "d3",
-      "startMs": 22000,
+      "startMs": 44850,
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "The tone returns to full volume as the description finishes.",
-          "measuredDurationMs": 4083,
+          "text": "Lips meet metal.",
+          "measuredDurationMs": 1241,
           "audioRef": null
         },
         {
-          "text": "The tone returns to full volume.",
-          "measuredDurationMs": 2674,
+          "text": "A kiss.",
+          "measuredDurationMs": 877,
+          "audioRef": null
+        }
+      ]
+    },
+    {
+      "id": "d4",
+      "startMs": 73350,
+      "kind": "AUDIO_DESCRIPTION",
+      "variants": [
+        {
+          "text": "Thom's eyes stay shut.",
+          "measuredDurationMs": 1605,
+          "audioRef": null
+        },
+        {
+          "text": "Eyes shut.",
+          "measuredDurationMs": 877,
+          "audioRef": null
+        }
+      ]
+    },
+    {
+      "id": "d5",
+      "startMs": 79925,
+      "kind": "AUDIO_DESCRIPTION",
+      "variants": [
+        {
+          "text": "Magenta words linger.",
+          "measuredDurationMs": 1241,
+          "audioRef": null
+        },
+        {
+          "text": "Words linger.",
+          "measuredDurationMs": 877,
+          "audioRef": null
+        }
+      ]
+    },
+    {
+      "id": "d6",
+      "startMs": 87350,
+      "kind": "AUDIO_DESCRIPTION",
+      "variants": [
+        {
+          "text": "Celia watches.",
+          "measuredDurationMs": 877,
+          "audioRef": null
+        },
+        {
+          "text": "Celia.",
+          "measuredDurationMs": 514,
           "audioRef": null
         }
       ]

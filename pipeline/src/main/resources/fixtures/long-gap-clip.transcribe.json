@@ -1,0 +1,152 @@
+{
+  "jobName": "baton-long-gap-clip",
+  "accountId": "000000000000",
+  "status": "COMPLETED",
+  "language_code": "en-US",
+  "results": {
+    "transcripts": [
+      {
+        "transcript": "Nothing moves on the ridge. There, do you see it?"
+      }
+    ],
+    "items": [
+      {
+        "type": "pronunciation",
+        "start_time": "0.000",
+        "end_time": "0.400",
+        "alternatives": [
+          {
+            "content": "Nothing",
+            "confidence": "0.996"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "0.400",
+        "end_time": "0.800",
+        "alternatives": [
+          {
+            "content": "moves",
+            "confidence": "0.996"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "0.850",
+        "end_time": "1.100",
+        "alternatives": [
+          {
+            "content": "on",
+            "confidence": "0.994"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "1.100",
+        "end_time": "1.350",
+        "alternatives": [
+          {
+            "content": "the",
+            "confidence": "0.994"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "1.400",
+        "end_time": "2.000",
+        "alternatives": [
+          {
+            "content": "ridge",
+            "confidence": "0.997"
+          }
+        ]
+      },
+      {
+        "type": "punctuation",
+        "alternatives": [
+          {
+            "content": ".",
+            "confidence": "0.0"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "32.000",
+        "end_time": "32.450",
+        "alternatives": [
+          {
+            "content": "There",
+            "confidence": "0.995"
+          }
+        ]
+      },
+      {
+        "type": "punctuation",
+        "alternatives": [
+          {
+            "content": ",",
+            "confidence": "0.0"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "32.600",
+        "end_time": "32.850",
+        "alternatives": [
+          {
+            "content": "do",
+            "confidence": "0.993"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "32.850",
+        "end_time": "33.150",
+        "alternatives": [
+          {
+            "content": "you",
+            "confidence": "0.995"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "33.150",
+        "end_time": "33.500",
+        "alternatives": [
+          {
+            "content": "see",
+            "confidence": "0.996"
+          }
+        ]
+      },
+      {
+        "type": "pronunciation",
+        "start_time": "33.550",
+        "end_time": "34.000",
+        "alternatives": [
+          {
+            "content": "it",
+            "confidence": "0.994"
+          }
+        ]
+      },
+      {
+        "type": "punctuation",
+        "alternatives": [
+          {
+            "content": "?",
+            "confidence": "0.0"
+          }
+        ]
+      }
+    ]
+  }
+}
