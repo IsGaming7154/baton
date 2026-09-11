@@ -295,7 +295,7 @@ Open, and not hidden:
 
 ## Documents
 
-- **[`FRICTION_LOG.md`](FRICTION_LOG.md)** — twelve entries on where Fire OS, the SDKs, the documentation and the Windows toolchain got in the way. Kept from the first commit rather than reconstructed at the end. Entries 10, 11 and 12 are worked out from AOSP and AndroidX source, with entry 12's mix-period numbers measured on the device.
+- **[`FRICTION_LOG.md`](FRICTION_LOG.md)** — sixteen entries on where Fire OS, the SDKs, the documentation and the Windows toolchain got in the way. Kept from the first commit rather than reconstructed at the end. Entries 10, 11 and 12 are worked out from AOSP and AndroidX source, with entry 12's mix-period numbers measured on the device.
 - **[`PRD.md`](PRD.md)** — the full product definition: fifty user stories, the priority model, the pipeline design, and an explicit out-of-scope list.
 
 ---

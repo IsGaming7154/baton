@@ -324,4 +324,87 @@ The request for Fire OS is simply that this reach API 28's installed base, which
 
 ---
 
+## 13. A mono narration duplicated to a stereo output measures 3 dB hotter than it was rendered at, so every duck came out too deep
+
+**Severity:** high — every automatic duck computed from the mono measurement was wrong by a consistent, predictable amount
+**Area:** Fire OS audio framework (API 28) / loudness calibration
+
+**What was attempted.** Baton renders and measures its narration as mono at −27 LKFS (`SpeechClarity`, matching the −27 LKFS Amazon Prime Video and Netflix both specify for description narration), then computes how far to duck the programme bed from that measurement together with the programme's own BS.1770 loudness.
+
+**What happened.** The measurement is taken as mono; what plays is not. On Android 9, `AudioMixer::Track::prepareForDownmix` explicitly declines to remix a mono track onto a stereo mixer — the source comment reads "MONO_HACK Only remix (upmix or downmix) if the track and mixer/device channel masks are not the same and not handled internally, as mono -> stereo currently is" — and the mono sample is instead copied to both output channels. The per-frame mixing code does the same at two different layers: the resampler's `CHANNELS == 1` branch computes one sample `l` and writes it to both `out[0]` and `out[1]`, and the mixer's `MIXTYPE_MONOEXPAND` case multiplies that same input sample by each output channel's own volume and writes a copy to every channel. Neither applies any reduction for the duplication — a search of every file under `media/libaudioprocessing` for "pan" returns nothing; there is no pan-law logic anywhere in this mixer.
+
+BS.1770 sums power across channels, so a signal duplicated identically to both channels of a stereo pair measures `10·log10(2) ≈ 3.01` LU hotter than the same signal measured as mono. A narration authored and measured at −27 LKFS therefore reaches the ear about 3 LU hotter than that figure, and a duck rule that computes its dip straight from the mono LKFS number puts the voice about 15.5 LU above the ducked bed instead of the intended 12.5 — every dip about 3 dB too deep.
+
+**Sources.** LineageOS `android_frameworks_av`, branch `lineage-16.0` (Android 9): `media/libaudioprocessing/AudioMixer.cpp:252-257` (the MONO_HACK comment and the mono→stereo early return), `media/libaudioprocessing/AudioResamplerFirProcess.h:231-242` (the `CHANNELS == 1` branch writing one sample to both outputs), `media/libaudioprocessing/AudioMixerOps.h:294-299` (`MIXTYPE_MONOEXPAND`).
+
+**Status.** Source-established for a stereo mixer on this LineageOS mirror of `frameworks/av`. **Not yet confirmed on the Fire TV** — nothing has captured the Stick's actual HDMI output to measure the duplication directly (see entry 15 for why that capture doesn't exist yet).
+
+**Workaround.** A `DirectorConfig.narrationMonoToStereoOffsetDb` knob, defaulting to `10·log10(2)`, added to the duck-depth rule — `director/src/main/kotlin/dev/baton/director/DirectorConfig.kt:69,234` and `director/src/main/kotlin/dev/baton/director/DuckDepth.kt:122-124`. It is settable to `0` if a device measurement ever shows a vendor-supplied pan law that already levels the duplication. This lives on the unmerged `duck-calibration` branch (commit `7d0e07d`) — it is not part of this tree's history and is not shipped.
+
+**Ask.** Documented channel-mapping and gain behaviour for mono tracks on Fire OS audio outputs, including HDMI: whether any Fire TV device applies a pan law the stock AOSP mixer does not, and whether that differs from what a Stick with no internal speaker does over HDMI passthrough.
+
+---
+
+## 14. `AudioTrack.getUnderrunCount()` always reports 0 for a `MODE_STATIC` track — it cannot confirm what it looks like it confirms
+
+**Severity:** medium — a diagnostic dead end that reads like working evidence
+**Area:** Fire OS audio APIs / diagnostics
+
+**What was attempted.** Confirm that switching narration playback from `MODE_STREAM` to `MODE_STATIC` (`RenderedAudioSpeaker.kt`) actually fixed the underrun pops that motivated the switch, by reading `AudioTrack.getUnderrunCount()` before and after.
+
+**What happened.** `underrunCount` read 0 on both the old streaming build and the new static one — which looked like confirmation, until the source explained why it can't be. `StaticAudioTrackClientProxy::getUnderrunCount()` is hard-coded to return `0` unconditionally. The server side matches it: `StaticAudioTrackServerProxy::tallyUnderrunFrames()` says outright, in its own comment, "we don't have a location to count underrun frames. The underrun frame counter only exists in `AudioTrackSharedStreaming`." A static track has no underrun counter anywhere in the shared-memory IPC path, so a 0 proves nothing about whether the mode switch changed anything — it would read 0 either way.
+
+By contrast, a streaming track's count is real: `AudioTrackServerProxy::tallyUnderrunFrames()` increments a counter stored in `cblk->u.mStreaming.mUnderrunCount` whenever the mixer thread finds fewer frames ready than it wanted, and the mixer calls it from exactly that check on every mix pass.
+
+**Sources.** LineageOS `android_frameworks_av`, branch `lineage-16.0`. Header: `include/private/media/AudioTrackShared.h` — `StaticAudioTrackClientProxy` at line 415, its `getUnderrunCount()` override returning `0` at lines 457-459; the streaming base class `AudioTrackClientProxy::getUnderrunCount()` returning `mCblk->u.mStreaming.mUnderrunCount` at lines 400-402. (The header lives at `include/private/media/AudioTrackShared.h` in this checkout, not under `media/libaudioclient/include/media/` — that shorter path does not exist here.) Implementation: `media/libaudioclient/AudioTrackShared.cpp` — `StaticAudioTrackServerProxy::tallyUnderrunFrames()` and its "no location to count" comment at lines 1215-1226; the streaming `AudioTrackServerProxy::tallyUnderrunFrames()` at lines 951-963. Call site for the streaming path: `services/audioflinger/Threads.cpp:4722-4726`, inside the `framesReady < desiredFrames` check, calling `track->mAudioTrackServerProxy->tallyUnderrunFrames(desiredFrames)`.
+
+**How Baton caught it.** Recorded in this repo's own measurement table, `README.md:277`: "`underrunCount=0` on both the old `MODE_STREAM` build and `MODE_STATIC` — so it is not evidence for the switch: a static track always reports 0."
+
+**Ask.** Document the always-0 behaviour on `AudioTrack.getUnderrunCount()`'s own reference page for `MODE_STATIC`, or give static tracks a real underrun signal instead of a dead API that returns a plausible-looking zero.
+
+---
+
+## 15. There is no supported way to record a Fire TV Stick's own audio for the hackathon's demo video
+
+**Severity:** high — blocks the submission's own demo-video requirement
+**Area:** Fire OS / Android 9 capture tooling
+
+**What was attempted.** Produce the hackathon demo video with audio captured directly from the Fire TV Stick, so a reviewer hears exactly what a viewer hears — ducking, narration and all — rather than a re-recording.
+
+**What happened.** Every software capture path available on this device is closed:
+
+- Android 9's `adb shell screenrecord` captures video only. `cmds/screenrecord/screenrecord.cpp` declares exactly one MIME type constant, `kMimeTypeAvc = "video/avc"` (line 68), feeds it to a single `MediaCodec` encoder, and the muxer callback adds exactly one track from that encoder's output format (`muxer->addTrack(newFormat)`, line 482). The word "audio" does not appear anywhere in the file.
+- `scrcpy`'s audio forwarding needs Android 11 (API 30) or newer. Its own README states the feature outright — "audio forwarding (doc/audio.md) (Android 11+)" (`README.md:37`) — and `doc/audio.md:11` is more specific about this exact case: "For Android 10 or earlier, audio cannot be captured and is automatically disabled." The Fire TV Stick here runs Android 9.
+
+**What's left.** An external HDMI capture device is the only route not closed by the above. Whether HDCP on the Stick's HDMI output blocks that device from capturing anything has not been tested — this is stated plainly as untested, not as a working solution.
+
+**Why it matters for this submission specifically.** The hackathon's own rules require it: "Fire TV: Any framework or language is acceptable (React Native, Android/Kotlin/Java, web technologies, etc.). The requirement is that the project runs on Fire OS or Vega OS. The demo video must show the project running on an actual Fire TV device or the Fire TV/Vega simulator." (`https://amazonappdev2026.devpost.com/rules`, Submission Requirements, Fire TV-specific instructions.) Fetched successfully this session with a plain HTTP client using no explicit user agent (HTTP 200); a request with an explicit browser-style `User-Agent` header still drew HTTP 403 — consistent with entry 6, which found the block on non-browser clients generally, not on any one specific request shape.
+
+**Sources.** LineageOS `android_frameworks_av`, branch `lineage-16.0`: `cmds/screenrecord/screenrecord.cpp:68` (the sole MIME constant) and `:482` (single-track muxer add), plus a full-file search for "audio" returning no matches. `Genymobile/scrcpy`, branch `master`: `README.md:37`, `doc/audio.md:11`. Note the screenrecord source is verified against LineageOS's mirror of `frameworks/av`, not a stock-AOSP checkout; `cmds/screenrecord` is not known to carry Lineage-specific patches, but that was not independently confirmed.
+
+**Ask.** A supported capture path for a Fire TV Stick's own audio and video together — even a debug-only one gated behind Developer Options, the way `screenrecord` itself already is.
+
+---
+
+## 16. Media3 1.4.1's `AudioProcessor.flush()` gives a processor no way to learn where a seek landed
+
+**Severity:** medium — a real bug, fixed, but only discoverable by decompiling the pinned dependency rather than reading its current source
+**Area:** AndroidX Media3 / ExoPlayer (pinned version 1.4.1)
+
+**What was attempted.** After `DuckingAudioProcessor` reported impossible `sinkLatencyMs` values (observed: −38000 / −66500 ms) following a seek, establish whether the `AudioProcessor` interface Media3 1.4.1 exposes gives a processor any way to learn the position playback resumed from when the platform calls `flush()`.
+
+**What happened.** It does not, at this version. Decompiling the actual `AudioProcessor.class` this project depends on — `media3-common-1.4.1.aar`'s `classes.jar`, `androidx/media3/common/audio/AudioProcessor.class`, read with `javap` since no 1.4.1 sources jar exists anywhere in the Gradle cache — shows `flush()` as a bare no-argument method: `public abstract void flush();`. There is no `StreamMetadata` class file anywhere in that jar and no `flush(StreamMetadata)` overload on the interface at this version.
+
+A later version does carry it. The cached `androidx/media` release-branch checkout (currently at 1.11.0, 2026-08-05) has `flush(StreamMetadata)` as the primary method, the old no-arg `flush()` now `@Deprecated`, and `StreamMetadata.positionOffsetUs` documented as "up-to-date at the time of the `flush(StreamMetadata)` call." The release notes place that addition specifically in **1.11.0** (`RELEASENOTES.md:183-185`, tracking issue `androidx/media#418`) — seven minor versions after the 1.4.1 this project pins.
+
+So on 1.4.1, `DuckingAudioProcessor` gets no platform-given signal that a seek happened or where it landed; it sees the same `queueInput`/`getOutput` calls it would see during continuous playback, with `onFlush()` as its only hook — called on every flush, seek or not, carrying no position.
+
+**Sources.** `media3-common-1.4.1.aar` (Gradle cache: `androidx.media3/media3-common/1.4.1/.../media3-common-1.4.1.aar`), `classes.jar!androidx/media3/common/audio/AudioProcessor.class`, decompiled with `javap -p` (JDK 21) — no sources jar for 1.4.1 was found anywhere under the Gradle cache, so this is the compiled artifact itself, not source. `androidx/media`, release branch (cached, currently 1.11.0): `libraries/common/src/main/java/androidx/media3/common/audio/AudioProcessor.java` (the `flush(StreamMetadata)`/`positionOffsetUs` API) and `RELEASENOTES.md:183-185` for the version it shipped in.
+
+**Workaround (shipped).** `BatonPlayer` already listens for `Player.DISCONTINUITY_REASON_SEEK`; it now hands the landing position to `DuckingAudioProcessor.seekedTo()`, which `writtenPositionMs()` adds back once `onFlush()` resets the frame counter for the new segment. See `player/src/main/java/dev/baton/player/BatonPlayer.kt:69` (`if (reason == Player.DISCONTINUITY_REASON_SEEK) sampleLevelGain.seekedTo(newPosition.positionMs)`) and `player/src/main/java/dev/baton/player/DuckingAudioProcessor.kt:103` (`seekedTo`), `:119` (`writtenPositionMs`), `:185` (`onFlush`). Landed in commit `75bc828`.
+
+**Ask.** Nothing to ask of Amazon here — this is an AndroidX Media3 gap, already closed upstream by 1.11.0. Recorded because the gap between "pinned version" and "current upstream source" is exactly the trap: reading the library's latest source without checking the actual pinned jar would have missed that 1.4.1 predates the fix entirely.
+
+---
+
 *Entries are appended as they are encountered. This log is a deliverable, not a postscript.*
