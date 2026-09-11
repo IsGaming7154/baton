@@ -53,6 +53,24 @@ class BatonPlayer(context: Context, log: (String) -> Unit = {}) {
     /** The active [ContentGain]: the output-stage duck. See the class doc. */
     val contentGain: ContentGain = OutputStageContentGain(exoPlayer, exoPlayer.applicationLooper, log = log)
 
+    init {
+        // sampleLevelGain.writtenPositionMs() counts frames since its last sink
+        // flush, and a seek is one of those flushes. Media3 1.4.1's
+        // AudioProcessor.flush() takes no arguments, so the processor itself has
+        // no way to learn where a seek landed -- this listener is the one place
+        // that does, so it hands the position straight over. See
+        // DuckingAudioProcessor.seekedTo.
+        exoPlayer.addListener(object : Player.Listener {
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int,
+            ) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) sampleLevelGain.seekedTo(newPosition.positionMs)
+            }
+        })
+    }
+
     val clock: PlaybackClock = object : PlaybackClock {
         override fun positionMs(): Long = exoPlayer.currentPosition.coerceAtLeast(0L)
 

@@ -146,6 +146,24 @@ class DuckingAudioProcessorTest : FunSpec({
         DuckingAudioProcessor().writtenPositionMs() shouldBe 0L
     }
 
+    test("written position rebases to where a seek landed instead of counting through the cut") {
+        val processor = configured(sampleRateHz, channels = 1)
+        // Some content decoded before the seek arrives -- this is what the old
+        // frame count kept counting from, producing a written position stuck
+        // near zero while the platform's own position had already jumped ahead.
+        processor.push(frames = sampleRateHz / 2, sample = fullScale, channels = 1)
+
+        // BatonPlayer's seek listener calls this with wherever the seek landed,
+        // then the sink's own flush() arrives -- see DuckingAudioProcessor.seekedTo.
+        processor.seekedTo(39_000L)
+        processor.flush()
+
+        processor.writtenPositionMs() shouldBe 39_000L
+
+        processor.push(frames = sampleRateHz / 2, sample = fullScale, channels = 1)
+        processor.writtenPositionMs() shouldBe 39_500L
+    }
+
     test("no loudness is reported before there is a full window to measure") {
         val processor = configured(sampleRateHz, channels = 2)
 

@@ -82,16 +82,42 @@ class DuckingAudioProcessor(
     @Volatile
     private var meter: ShortTermLoudnessMeter? = null
 
+    /**
+     * Where the content timeline stood at the last [onFlush] -- a seek, in this
+     * app's case. [framesProcessed] only ever counts frames *since* that flush
+     * (see [onFlush]), so on its own it says how long the current segment has
+     * been decoding, not where on the content timeline it is. Media3 1.4.1's
+     * `AudioProcessor.flush()` takes no arguments, so nothing in this class's own
+     * callbacks can learn the answer; the one place that does know is the seek
+     * notification `BatonPlayer` already listens for, so it hands it over
+     * through [seekedTo]. Written on the app thread, read here on the playback
+     * thread that owns [framesProcessed] -- `@Volatile` and nothing more, same
+     * as [target].
+     */
+    @Volatile
+    private var flushPositionOffsetMs: Long = 0L
+
     override fun shortTermLufs(): Double? = meter?.lufs()
 
+    /** Called by [dev.baton.player.BatonPlayer] whenever the player reports a seek. See [flushPositionOffsetMs]. */
+    fun seekedTo(positionMs: Long) {
+        flushPositionOffsetMs = positionMs
+    }
+
     /**
-     * How far into the stream the last frame handed to the sink sits, in media
-     * time. Diffed against the position the platform reports as audible (which
-     * is latency-compensated -- see [dev.baton.ports.PlaybackClock]), this is how
-     * you find the sink's buffered latency on a given device instead of assuming
-     * one: see the heartbeat log in `MainActivity`.
+     * How far into the content timeline the last frame handed to the sink sits,
+     * in media time. Diffed against the position the platform reports as audible
+     * (which is latency-compensated -- see [dev.baton.ports.PlaybackClock]), this
+     * is how you find the sink's buffered latency on a given device instead of
+     * assuming one: see the heartbeat log in `MainActivity`.
+     *
+     * [flushPositionOffsetMs] plus [framesProcessed] and not [framesProcessed]
+     * alone: a frame count reset at every flush is only ever a duration since
+     * that flush, and the flush that matters here is a seek, after which the
+     * content position and "time since flush" are no longer the same number.
      */
-    fun writtenPositionMs(): Long = if (sampleRateHz == 0) 0L else framesProcessed * 1_000L / sampleRateHz
+    fun writtenPositionMs(): Long =
+        if (sampleRateHz == 0) 0L else flushPositionOffsetMs + framesProcessed * 1_000L / sampleRateHz
 
     @Volatile
     var fadesStarted: Int = 0
@@ -151,12 +177,17 @@ class DuckingAudioProcessor(
      * A seek flushes the sink, so the frames either side of it are not adjacent.
      * Fading between them would be fading across a cut; land on the target and
      * carry on.
+     *
+     * [framesProcessed] resets here too, for the same reason. It only ever
+     * counts frames since the *last* flush -- see [flushPositionOffsetMs], which
+     * is what turns that count back into a content-timeline position.
      */
     override fun onFlush() {
         gain = target
         rampTo = target
         rampFrom = target
         rampPosition = fadeFrames
+        framesProcessed = 0L
         // Same argument as the fade, for the same reason: a window averaged
         // across a cut reports the loudness of a scene that is no longer playing.
         meter?.reset()
@@ -168,6 +199,7 @@ class DuckingAudioProcessor(
         rampTo = UNITY
         rampPosition = 0
         framesProcessed = 0L
+        flushPositionOffsetMs = 0L
         meter?.reset()
     }
 
