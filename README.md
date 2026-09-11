@@ -302,6 +302,8 @@ Open, and not hidden:
 
 ## Attribution and licence
 
+Baton's own code is MIT-licensed — see [`LICENSE`](LICENSE). Third-party assets below keep their own licences.
+
 The bundled demo clip is an 89.4-second excerpt, from 05:24, of **Tears of Steel**.
 
 > Tears of Steel — (CC) Blender Foundation | mango.blender.org — Creative Commons Attribution 3.0
