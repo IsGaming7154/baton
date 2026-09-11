@@ -123,16 +123,24 @@ For a hackathon that explicitly rewards open-source contribution, this is the mo
 
 ---
 
-## 6. Devpost blocks non-browser user agents
+## 6. Devpost's bot filter rejects some programmatic requests, and not the ones you would expect
 
 **Severity:** low
 **Area:** hackathon tooling
 
 **What was attempted.** Read the hackathon rules and resources pages programmatically.
 
-**What happened.** Every path returned `HTTP 403 Forbidden` to a plain HTTP client, regardless of path.
+**What happened.** At the time this was first recorded, every path returned `HTTP 403 Forbidden` to the plain HTTP client used then, regardless of path. A re-test on 2026-09-11 contradicts the idea that Devpost blocks non-browser clients as a rule. Fetching `https://amazonappdev2026.devpost.com/rules` with curl 8.18.0:
 
-**Workaround.** Drive a real browser and read the rendered text out of the DOM.
+- curl's default User-Agent: **200**
+- `User-Agent: Python-urllib/3.13`: **200**
+- a full Chrome User-Agent string: **200**
+- `User-Agent: Mozilla/5.0` (a bare, incomplete browser string): **403**
+- `/resources` with the default User-Agent: **200**
+
+The rule behind the block isn't known. The only reproducible trigger seen is a bare `Mozilla/5.0` User-Agent.
+
+**Workaround.** Send a complete User-Agent string or none, or read the page in a real browser.
 
 ---
 
