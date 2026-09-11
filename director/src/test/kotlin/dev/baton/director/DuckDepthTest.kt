@@ -3,6 +3,7 @@ package dev.baton.director
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
+import kotlin.math.log10
 
 /**
  * The invariant is the loudness difference, not the dip. Every test here is
@@ -16,14 +17,17 @@ class DuckDepthTest : FunSpec({
 
     test("the narration ends up exactly the target loudness difference above the bed") {
         // The property the whole rule exists for, swept across the band where
-        // neither clamp is in play: -39.5 LUFS, where the dip reaches zero, up to
-        // -20.5, where it reaches the -19 dB floor. In between the difference has
-        // to land on the target exactly, not approximately.
-        for (programmeLufs in listOf(-20.5, -24.0, -26.6, -30.0, -33.0, -36.0, -39.0)) {
+        // neither clamp is in play: about -36.49 LUFS, where the dip reaches
+        // zero, up to about -17.49, where it reaches the -19 dB floor. In
+        // between the difference has to land on the target exactly, not
+        // approximately -- and it is the narration *as heard* that has to land
+        // there: duplicated to both channels of a stereo output, and so the
+        // mono-to-stereo offset hotter than its mono measurement.
+        for (programmeLufs in listOf(-17.49, -20.0, -24.0, -26.6, -30.0, -33.0, -36.0)) {
             val duck = duckFor(programmeLufs, config)
             val bedAfterDuck = programmeLufs + duck.db
 
-            (config.narrationLkfs - bedAfterDuck) shouldBe
+            (config.narrationLkfs + config.narrationMonoToStereoOffsetDb - bedAfterDuck) shouldBe
                 (config.targetLoudnessDifferenceLu plusOrMinus 1e-9)
         }
     }
@@ -34,15 +38,20 @@ class DuckDepthTest : FunSpec({
     // the study does not publish where its band boundaries fall.
 
     test("loud programme audio gets the deep dip the matrix calls for") {
-        duckFor(-20.5, config).db shouldBe (-19.0 plusOrMinus 1e-9)
+        // -19 dB is reached at about -17.49 LUFS (-27 + 3.01 - 12.5 + 19). The
+        // input is that crossing rounded to two places, so the tolerance is the
+        // rounding, not slack in the rule.
+        duckFor(-17.49, config).db shouldBe (-19.0 plusOrMinus 1e-3)
     }
 
     test("normal programme audio gets the middle dip") {
-        duckFor(-30.5, config).db shouldBe (-9.0 plusOrMinus 1e-9)
+        // About -27.49 LUFS, the same rounding as above.
+        duckFor(-27.49, config).db shouldBe (-9.0 plusOrMinus 1e-3)
     }
 
     test("quiet programme audio gets a gentle dip rather than a hole") {
-        duckFor(-36.5, config).db shouldBe (-3.0 plusOrMinus 1e-9)
+        // About -33.49 LUFS.
+        duckFor(-33.49, config).db shouldBe (-3.0 plusOrMinus 1e-3)
     }
 
     test("near-silent content is not ducked at all") {
@@ -53,11 +62,16 @@ class DuckDepthTest : FunSpec({
     }
 
     test("the rule crosses into no-duck on its own, without a threshold constant") {
-        // narrationLkfs - targetLoudnessDifferenceLu = -39.5 LUFS. Above it the
-        // bed needs pulling down; below it the bed is already far enough under.
-        duckFor(-39.4, config).db shouldBe (-0.1 plusOrMinus 1e-9)
-        duckFor(-39.5, config) shouldBe ContentDuck.Unity
-        duckFor(-39.6, config) shouldBe ContentDuck.Unity
+        // narrationLkfs + monoToStereoOffsetDb - targetLoudnessDifferenceLu is
+        // about -36.49 LUFS. Above it the bed needs pulling down; below it the
+        // bed is already far enough under.
+        val crossing =
+            config.narrationLkfs + config.narrationMonoToStereoOffsetDb -
+                config.targetLoudnessDifferenceLu
+
+        duckFor(crossing + 0.1, config).db shouldBe (-0.1 plusOrMinus 1e-9)
+        duckFor(crossing, config) shouldBe ContentDuck.Unity
+        duckFor(crossing - 0.1, config) shouldBe ContentDuck.Unity
     }
 
     test("the dip never gets deeper than the clamp, however loud the content is") {
@@ -147,13 +161,37 @@ class DuckDepthTest : FunSpec({
     }
 
     test("the deadband never holds the film down once the bed is quiet enough to need no dip") {
-        // The rule reaches zero dip at -39.5 LUFS. Crossing that from a duck must
-        // return Unity outright: a deadband able to swallow this would leave the
-        // film quiet with nothing speaking over it, which is far worse than the
-        // pumping it exists to prevent.
-        val settled = duckFor(-39.0, config)
+        // The rule reaches zero dip at about -36.49 LUFS. Crossing that from a
+        // duck must return Unity outright: a deadband able to swallow this
+        // would leave the film quiet with nothing speaking over it, which is
+        // far worse than the pumping it exists to prevent. The inputs
+        // straddle the crossing: -36.0 still takes a dip, -36.6 does not.
+        val settled = duckFor(-36.0, config)
 
-        duckFor(-39.6, config, settled) shouldBe ContentDuck.Unity
+        duckFor(-36.6, config, settled) shouldBe ContentDuck.Unity
+    }
+
+    test("the default mono-to-stereo offset is the dual-mono loudness gain") {
+        // BS.1770 sums over channels, so a mono signal duplicated to both
+        // channels of a stereo output measures 10*log10(2) = 3.01 LU hotter
+        // than the same signal measured as mono. Pinned so the calibration
+        // cannot drift from the physics it exists to correct.
+        config.narrationMonoToStereoOffsetDb shouldBe (10.0 * log10(2.0) plusOrMinus 1e-9)
+        DirectorConfig.DEFAULT_NARRATION_MONO_TO_STEREO_OFFSET_DB shouldBe
+            (10.0 * log10(2.0) plusOrMinus 1e-9)
+    }
+
+    test("an offset of zero is the old rule, for a mixer that levels the duplication") {
+        // The offset is a calibration knob: if a device measurement shows a
+        // vendor pan law that already levels the mono duplication, it is set
+        // to 0 and the rule must go back to the crossings it had before the
+        // correction -- the old -39.5 LUFS zero-dip among them.
+        val levelled = config.copy(narrationMonoToStereoOffsetDb = 0.0)
+
+        duckFor(-20.5, levelled).db shouldBe (-19.0 plusOrMinus 1e-9)
+        duckFor(-30.5, levelled).db shouldBe (-9.0 plusOrMinus 1e-9)
+        duckFor(-36.5, levelled).db shouldBe (-3.0 plusOrMinus 1e-9)
+        duckFor(-39.5, levelled) shouldBe ContentDuck.Unity
     }
 
     test("an unmeasured programme still falls back to the static dip") {

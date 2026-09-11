@@ -30,8 +30,16 @@ import kotlin.math.abs
  * that achieves a given difference is arithmetic:
  *
  * ```
- * dip = narrationLkfs - targetLoudnessDifferenceLu - programmeLufs
+ * dip = narrationLkfs + monoToStereoOffsetDb - targetLoudnessDifferenceLu - programmeLufs
  * ```
+ *
+ * The narration enters that sum as it is *heard*, not as it is measured. It is
+ * rendered and measured as mono, but a mono `AudioTrack` on a stereo output is
+ * duplicated to both channels at full level, which a BS.1770 meter reads
+ * `10*log10(2)` LU hotter than the mono measurement -- see
+ * [DirectorConfig.narrationMonoToStereoOffsetDb] for the AOSP citations. Adding
+ * the offset is what makes the voice sit the configured distance above the bed
+ * as actually reproduced; without it every dip is about 3 dB too deep.
  *
  * A loud passage gets a deep dip and a quiet one gets a shallow dip, from one
  * rule, with no bands and no boundaries to jump across mid-scene.
@@ -45,18 +53,18 @@ import kotlin.math.abs
  *
  * The two agree on range and on shape. At the default 12.5 LU -- the midpoint of
  * the recommended band -- the rule returns -19 dB at a programme loudness of
- * -20.5 LUFS, -9 dB at -30.5, and -3 dB at -36.5: the same three values, spread
- * across the range real programme material occupies, either side of the -26.6
- * LUFS mean the study reports. That is a consistency check and not a
- * reproduction, because the study does not publish where its band boundaries
- * fall, so there is no way to confirm that a given programme lands in the band
- * whose value the rule matches.
+ * about -17.49 LUFS, -9 dB at about -27.49, and -3 dB at about -33.49: the
+ * same three values, spread across the range real programme material occupies,
+ * either side of the -26.6 LUFS mean the study reports. That is a consistency
+ * check and not a reproduction, because the study does not publish where its
+ * band boundaries fall, so there is no way to confirm that a given programme
+ * lands in the band whose value the rule matches.
  *
  * What decides it is that the loudness difference is the causal quantity and the
  * table is a discretisation of it. Three fixed dips have to assume a distribution
  * of programme loudness; the rule assumes nothing, has no discontinuity at a
  * band edge, and degrades sensibly on content the bands never anticipated. It
- * also reaches zero dip on its own, at -39.5 LUFS, without needing the
+ * also reaches zero dip on its own, at about -36.49 LUFS, without needing the
  * near-silent threshold as a separate constant -- near where the study puts it,
  * and for the same reason: there is nothing there to duck.
  *
@@ -111,7 +119,9 @@ fun duckFor(
     // the absence of the measurement that would let us do better.
     if (programmeLufs == null) return settle(ContentDuck.Ducked(config.duckDb), current, config)
 
-    val wanted = config.narrationLkfs - config.targetLoudnessDifferenceLu - programmeLufs
+    val wanted =
+        config.narrationLkfs + config.narrationMonoToStereoOffsetDb -
+            config.targetLoudnessDifferenceLu - programmeLufs
     if (wanted >= 0.0) return ContentDuck.Unity
     return settle(ContentDuck.Ducked(maxOf(wanted, config.maxDuckDb)), current, config)
 }

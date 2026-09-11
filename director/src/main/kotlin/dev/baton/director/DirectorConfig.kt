@@ -1,5 +1,7 @@
 package dev.baton.director
 
+import kotlin.math.log10
+
 /**
  * The numbers the arbitration policy is parameterised by.
  *
@@ -58,6 +60,30 @@ data class DirectorConfig(
      * to, or every duck is wrong by the difference.
      */
     val narrationLkfs: Double = DEFAULT_NARRATION_LKFS,
+    /**
+     * How much louder the narration is as heard than as measured: the offset
+     * between its mono measurement and its stereo reproduction.
+     *
+     * [narrationLkfs] is the level `SpeechClarity` renders and measures the
+     * utterance at, as mono. But a mono `AudioTrack` mixed into a stereo output
+     * on Android 9 is copied to both channels at full level, with no pan law:
+     * `AudioMixer.cpp` lines 252-257 of AOSP `media/libaudioprocessing`
+     * (LineageOS `android_frameworks_av`, lineage-16.0) applies unity gain per
+     * channel on the mono-to-stereo copy, and `AudioResamplerFirProcess.h`
+     * lines 231-242 and `AudioMixerOps.h` lines 294-299 do the same on their
+     * paths. A BS.1770 meter sums over channels, so that dual-mono signal
+     * measures `10*log10(2)` -- about 3.01 LU -- hotter than the mono
+     * measurement. Without this offset every dip is about 3 dB too deep: the
+     * voice lands roughly 15.5 LU above the bed instead of the configured
+     * 12.5.
+     *
+     * That behaviour is source-established for a stereo mixer and
+     * **unconfirmed on the Fire TV** until a capture measurement is taken --
+     * which is exactly why this is a knob and not a hard-coded literal. If a
+     * device measurement shows a vendor pan law that already levels the
+     * duplication, this is set to 0 and the rule in [duckFor] is untouched.
+     */
+    val narrationMonoToStereoOffsetDb: Double = DEFAULT_NARRATION_MONO_TO_STEREO_OFFSET_DB,
     /**
      * How far below the narration the content bed should sit while a description
      * is playing. Broadcast research puts the minimum at 10 LU for commentary
@@ -222,6 +248,12 @@ data class DirectorConfig(
 
         /** Amazon Prime Video and Netflix both specify -27 LKFS, +-2 LU, for description narration. */
         const val DEFAULT_NARRATION_LKFS: Double = -27.0
+
+        /**
+         * The loudness gain of a mono signal duplicated to both channels of a
+         * stereo output, as BS.1770 reads it. See [narrationMonoToStereoOffsetDb].
+         */
+        val DEFAULT_NARRATION_MONO_TO_STEREO_OFFSET_DB: Double = 10.0 * log10(2.0)
 
         /** Midpoint of the 10-15 LU the intelligibility research recommends. */
         const val DEFAULT_TARGET_LOUDNESS_DIFFERENCE_LU: Double = 12.5

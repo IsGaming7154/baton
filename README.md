@@ -277,7 +277,7 @@ clamped so it never boosts and never digs past −19 dB, and held through a 1 dB
 
 This is only possible because the app measures the programme itself. On the bundled demo clip, `ffmpeg`'s `ebur128` reports −30.3 LUFS integrated with a loudness range of 20.0 LU — LRA low −47.9, high −27.9. Put those two ends through the rule and it asks for no dip at all at the quiet end — at −47.9 LUFS the rule has already reached zero — and about −12 dB at the loud end. That is arithmetic from a measured programme loudness, not a hardware observation; what it establishes is that on this material the duck has something to adapt to.
 
-The same body of research publishes a three-band table — −19 / −9 / −3 dB, and no ducking below −48 LUFS. At the default 12.5 LU the rule lands on those three values at −20.5, −30.5 and −36.5 LUFS, and reaches zero dip on its own at −39.5 LUFS without needing the near-silent threshold as a separate constant. The source comment is careful to call that a **range check and not a reproduction**, because the study does not publish where its band boundaries fall.
+The same body of research publishes a three-band table — −19 / −9 / −3 dB, and no ducking below −48 LUFS. At the default 12.5 LU the rule lands on those three values at about −17.49, −27.49 and −33.49 LUFS, and reaches zero dip on its own at about −36.49 LUFS without needing the near-silent threshold as a separate constant. The source comment is careful to call that a **range check and not a reproduction**, because the study does not publish where its band boundaries fall.
 
 ### An in-house BS.1770 meter, because there is no other way to get the number
 
