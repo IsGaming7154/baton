@@ -1,9 +1,11 @@
 package dev.baton.director
 
 import io.kotest.assertions.withClue
+import io.kotest.common.ExperimentalKotest
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.property.PropTestConfig
 import io.kotest.property.checkAll
 
 /**
@@ -37,44 +39,52 @@ class AudioDirectorInvariantTest : FunSpec({
      * A property test that never reaches the interesting states proves nothing.
      * This asserts the generators keep producing them, so the invariant suite
      * cannot quietly go vacuous when the generators are edited later.
+     *
+     * Its draws are pinned, and the two tests above are not. This one asks a
+     * question about the generators rather than the director, and a fresh draw adds
+     * nothing to the answer but noise: the rarest cases here are reached ten or
+     * fifteen times in eight hundred scenarios, so any floor worth having sits
+     * inside the range an unlucky draw can fall to. Pinned, it fails when a change
+     * to the generators or the director moves what is reached, and only then.
      */
     test("the generated timelines actually exercise the cases they claim to") {
         val seen = Coverage()
-        checkAll(500, scenarios) { scenario -> drive(scenario, coverage = seen) }
-        checkAll(300, scenarios) { scenario -> drive(scenario, IMPATIENT, coverage = seen) }
+        checkAll(500, seeded(1), scenarios) { scenario -> drive(scenario, coverage = seen) }
+        checkAll(300, seeded(2), scenarios) { scenario -> drive(scenario, IMPATIENT, coverage = seen) }
 
-        // Thresholds sit at roughly a third of what the generators actually
-        // produce, so they catch a generator that stops reaching a case without
-        // flaking on seed-to-seed variance.
+        // Thresholds sit at about a third of the median over 360 unpinned draws,
+        // and below all but the lowest one percent of them, so an edit that
+        // re-rolls the draws does not trip one by luck and an edit that stops
+        // reaching a case still does.
         withClue(seen.toString()) {
-            (seen.ticks > 15_000) shouldBe true
-            (seen.dialogueTicks > 5_000) shouldBe true
-            (seen.scheduledSpeaking > 300) shouldBe true
-            (seen.reactiveSpeaking > 1_000) shouldBe true
-            (seen.dropsNoVariantFits > 80) shouldBe true
-            (seen.dropsNoSilenceAtCueStart > 80) shouldBe true
-            (seen.dropsNoVariants > 80) shouldBe true
-            (seen.reactivePreemptedScheduled > 15) shouldBe true
-            (seen.seekDuringSpeech > 100) shouldBe true
-            (seen.pauseDuringSpeech > 100) shouldBe true
-            (seen.speakerEndedSpeech > 300) shouldBe true
-            (seen.cueReplayedAfterSeek > 20) shouldBe true
-            (seen.overranMeasuredLength > 90) shouldBe true
+            (seen.ticks > 12_000) shouldBe true
+            (seen.dialogueTicks > 7_200) shouldBe true
+            (seen.scheduledSpeaking > 720) shouldBe true
+            (seen.reactiveSpeaking > 3_700) shouldBe true
+            (seen.dropsNoVariantFits > 230) shouldBe true
+            (seen.dropsNoSilenceAtCueStart > 110) shouldBe true
+            (seen.dropsNoVariants > 130) shouldBe true
+            (seen.reactivePreemptedScheduled > 68) shouldBe true
+            (seen.seekDuringSpeech > 310) shouldBe true
+            (seen.pauseDuringSpeech > 350) shouldBe true
+            (seen.speakerEndedSpeech > 520) shouldBe true
+            (seen.cueReplayedAfterSeek > 22) shouldBe true
+            (seen.overranMeasuredLength > 50) shouldBe true
             // All three withdrawal reasons, and at least some of them while the
             // content is stalled -- the case the two clocks were separated for.
             (seen.withdrawnOutOfSilence > 5) shouldBe true
-            (seen.withdrawnSpeakerOverdue > 12) shouldBe true
-            (seen.withdrawnNeverMeasured > 6) shouldBe true
-            (seen.withdrawnDuringStall > 3) shouldBe true
-            (seen.stallDuringSpeech > 300) shouldBe true
-            (seen.stallAnomalies > 15) shouldBe true
+            (seen.withdrawnSpeakerOverdue > 13) shouldBe true
+            (seen.withdrawnNeverMeasured > 7) shouldBe true
+            (seen.withdrawnDuringStall > 4) shouldBe true
+            (seen.stallDuringSpeech > 290) shouldBe true
+            (seen.stallAnomalies > 160) shouldBe true
             // The disclosure: spoken, interrupted and spoken again, withdrawn and
             // therefore discharged, and -- the case the "goes first" check reads
             // -- cues starting while it was still owed but did not fit.
-            (seen.disclosureStarted > 90) shouldBe true
-            (seen.disclosureRestarted > 55) shouldBe true
-            (seen.disclosureWithdrawn > 2) shouldBe true
-            (seen.cueStartedWhileDisclosureOwed > 50) shouldBe true
+            (seen.disclosureStarted > 95) shouldBe true
+            (seen.disclosureRestarted > 57) shouldBe true
+            (seen.disclosureWithdrawn > 3) shouldBe true
+            (seen.cueStartedWhileDisclosureOwed > 48) shouldBe true
         }
     }
 })
@@ -98,6 +108,10 @@ private val IMPATIENT = DirectorConfig(
     unmeasuredSpeechCeilingMs = 900,
     stallAnomalyMs = 50,
 )
+
+/** Opted in here, once: kotest marks the [PropTestConfig] constructor experimental. */
+@OptIn(ExperimentalKotest::class)
+private fun seeded(seed: Long) = PropTestConfig(seed = seed)
 
 private fun drive(
     scenario: Scenario,

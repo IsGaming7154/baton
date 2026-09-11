@@ -207,36 +207,60 @@ private fun randomRequest(random: Random, step: Int, ordinal: Int): ReactiveRequ
     },
 )
 
-private fun randomSteps(random: Random): List<Step> = List(random.nextInt(8, 90)) { index ->
-    Step(
-        dtMs = when (random.nextInt(10)) {
-            0 -> 0L
-            1 -> 1L
-            2 -> 17L
-            3 -> 33L
-            4 -> 250L
-            5 -> 600L
-            6 -> random.between(1, 40)
-            else -> 100L
-        },
-        playback = when (random.nextInt(12)) {
-            0 -> Playback.PAUSED
-            1 -> Playback.STALLED
-            else -> Playback.PLAYING
-        },
-        seek = when {
-            random.nextInt(14) != 0 -> null
-            random.nextBoolean() -> Seek.Back(random.between(500, 5_000))
-            else -> Seek.To(random.between(0, TIMELINE_END_MS + 2_000))
-        },
-        reactives = when (random.nextInt(20)) {
-            0 -> listOf(randomRequest(random, index, 0))
-            1 -> listOf(randomRequest(random, index, 0), randomRequest(random, index, 1))
-            else -> emptyList()
-        },
-        reactiveBeforeSeek = random.nextBoolean(),
-        reportSpeechEnded = random.nextInt(8) == 0,
-        speakerStalls = random.nextInt(4) == 0,
-        reportPhantomEnd = random.nextInt(20) == 0,
-    )
+/**
+ * A stall usually outlasts the tick it began on, the way a buffer that has run dry
+ * does. Drawn afresh for every tick, a stall was almost always one tick long, and
+ * the case the two clocks were separated for -- a wall-clock deadline coming due
+ * while the content clock is frozen -- was reached only when a withdrawal happened
+ * to land on one: a few times in eight hundred scenarios, and on an unlucky draw
+ * once. The viewer can still reach for pause part-way through one.
+ */
+private fun randomSteps(random: Random): List<Step> {
+    var stallTicksLeft = 0
+    return List(random.nextInt(8, 90)) { index ->
+        Step(
+            dtMs = when (random.nextInt(10)) {
+                0 -> 0L
+                1 -> 1L
+                2 -> 17L
+                3 -> 33L
+                4 -> 250L
+                5 -> 600L
+                6 -> random.between(1, 40)
+                else -> 100L
+            },
+            playback = when {
+                stallTicksLeft == 0 -> when (random.nextInt(12)) {
+                    0 -> Playback.PAUSED
+                    1 -> {
+                        stallTicksLeft = random.nextInt(0, 4)
+                        Playback.STALLED
+                    }
+                    else -> Playback.PLAYING
+                }
+                random.nextInt(12) == 0 -> {
+                    stallTicksLeft = 0
+                    Playback.PAUSED
+                }
+                else -> {
+                    stallTicksLeft--
+                    Playback.STALLED
+                }
+            },
+            seek = when {
+                random.nextInt(14) != 0 -> null
+                random.nextBoolean() -> Seek.Back(random.between(500, 5_000))
+                else -> Seek.To(random.between(0, TIMELINE_END_MS + 2_000))
+            },
+            reactives = when (random.nextInt(20)) {
+                0 -> listOf(randomRequest(random, index, 0))
+                1 -> listOf(randomRequest(random, index, 0), randomRequest(random, index, 1))
+                else -> emptyList()
+            },
+            reactiveBeforeSeek = random.nextBoolean(),
+            reportSpeechEnded = random.nextInt(8) == 0,
+            speakerStalls = random.nextInt(4) == 0,
+            reportPhantomEnd = random.nextInt(20) == 0,
+        )
+    }
 }
