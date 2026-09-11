@@ -324,9 +324,9 @@ The request for Fire OS is simply that this reach API 28's installed base, which
 
 ---
 
-## 13. A mono narration duplicated to a stereo output measures 3 dB hotter than it was rendered at, so every duck came out too deep
+## 13. A mono narration duplicated to a stereo output would measure 3 dB hotter than it was rendered at, so a duck computed from it would come out about 3 dB too deep
 
-**Severity:** high — every automatic duck computed from the mono measurement was wrong by a consistent, predictable amount
+**Severity:** high — a duck computed from the mono measurement would come out about 3 dB too deep, pending device confirmation
 **Area:** Fire OS audio framework (API 28) / loudness calibration
 
 **What was attempted.** Baton renders and measures its narration as mono at −27 LKFS (`SpeechClarity`, matching the −27 LKFS Amazon Prime Video and Netflix both specify for description narration), then computes how far to duck the programme bed from that measurement together with the programme's own BS.1770 loudness.
@@ -339,7 +339,7 @@ BS.1770 sums power across channels, so a signal duplicated identically to both c
 
 **Status.** Source-established for a stereo mixer on this LineageOS mirror of `frameworks/av`. **Not yet confirmed on the Fire TV** — nothing has captured the Stick's actual HDMI output to measure the duplication directly (see entry 15 for why that capture doesn't exist yet).
 
-**Workaround.** A `DirectorConfig.narrationMonoToStereoOffsetDb` knob, defaulting to `10·log10(2)`, added to the duck-depth rule — `director/src/main/kotlin/dev/baton/director/DirectorConfig.kt:69,234` and `director/src/main/kotlin/dev/baton/director/DuckDepth.kt:122-124`. It is settable to `0` if a device measurement ever shows a vendor-supplied pan law that already levels the duplication. This lives on the unmerged `duck-calibration` branch (commit `7d0e07d`) — it is not part of this tree's history and is not shipped.
+**Workaround.** A proposed configurable offset — `narrationMonoToStereoOffsetDb`, defaulting to `10·log10(2)` — in the duck-depth rule, settable to `0` if a device measurement ever shows a vendor-supplied pan law that already levels the duplication. This lives on an unmerged branch, waiting on a device capture measurement — it is not part of this tree's history and is not shipped.
 
 **Ask.** Documented channel-mapping and gain behaviour for mono tracks on Fire OS audio outputs, including HDMI: whether any Fire TV device applies a pan law the stock AOSP mixer does not, and whether that differs from what a Stick with no internal speaker does over HDMI passthrough.
 
@@ -366,7 +366,7 @@ By contrast, a streaming track's count is real: `AudioTrackServerProxy::tallyUnd
 
 ## 15. There is no supported way to record a Fire TV Stick's own audio for the hackathon's demo video
 
-**Severity:** high — blocks the submission's own demo-video requirement
+**Severity:** medium — blocks capturing the Stick's own audio cleanly; a camera pointed at the screen still satisfies the demo-video requirement itself
 **Area:** Fire OS / Android 9 capture tooling
 
 **What was attempted.** Produce the hackathon demo video with audio captured directly from the Fire TV Stick, so a reviewer hears exactly what a viewer hears — ducking, narration and all — rather than a re-recording.
@@ -378,7 +378,7 @@ By contrast, a streaming track's count is real: `AudioTrackServerProxy::tallyUnd
 
 **What's left.** An external HDMI capture device is the only route not closed by the above. Whether HDCP on the Stick's HDMI output blocks that device from capturing anything has not been tested — this is stated plainly as untested, not as a working solution.
 
-**Why it matters for this submission specifically.** The hackathon's own rules require it: "Fire TV: Any framework or language is acceptable (React Native, Android/Kotlin/Java, web technologies, etc.). The requirement is that the project runs on Fire OS or Vega OS. The demo video must show the project running on an actual Fire TV device or the Fire TV/Vega simulator." (`https://amazonappdev2026.devpost.com/rules`, Submission Requirements, Fire TV-specific instructions.) Fetched successfully this session with a plain HTTP client using no explicit user agent (HTTP 200); a request with an explicit browser-style `User-Agent` header still drew HTTP 403 — consistent with entry 6, which found the block on non-browser clients generally, not on any one specific request shape.
+**Why it matters for this submission specifically.** The hackathon's own rules require it: "Fire TV: Any framework or language is acceptable (React Native, Android/Kotlin/Java, web technologies, etc.). The requirement is that the project runs on Fire OS or Vega OS. The demo video must show the project running on an actual Fire TV device or the Fire TV/Vega simulator." (`https://amazonappdev2026.devpost.com/rules`, Submission Requirements, Fire TV-specific instructions.)
 
 **Sources.** LineageOS `android_frameworks_av`, branch `lineage-16.0`: `cmds/screenrecord/screenrecord.cpp:68` (the sole MIME constant) and `:482` (single-track muxer add), plus a full-file search for "audio" returning no matches. `Genymobile/scrcpy`, branch `master`: `README.md:37`, `doc/audio.md:11`. Note the screenrecord source is verified against LineageOS's mirror of `frameworks/av`, not a stock-AOSP checkout; `cmds/screenrecord` is not known to carry Lineage-specific patches, but that was not independently confirmed.
 
