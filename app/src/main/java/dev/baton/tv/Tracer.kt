@@ -39,6 +39,19 @@ class Tracer(
     private val speaker: Speaker,
     private val director: AudioDirector,
     private val log: (String) -> Unit,
+    /**
+     * Fired on the same tick [duck] itself changes -- never polled -- so a demo
+     * overlay can show the number without adding a clock of its own. No-op by
+     * default, so the tracer's own behaviour cannot depend on anyone listening.
+     */
+    private val onDuckChanged: (ContentDuck) -> Unit = {},
+    /**
+     * Fired on the same tick [speaking] itself changes, with `null` when the
+     * floor goes quiet. Event-triggered for the same reason as
+     * [onDuckChanged]: a description reaches an overlay the instant it starts,
+     * not whenever the overlay's own poll next happens to run.
+     */
+    private val onSpeakingChanged: (Speaking.Utterance?) -> Unit = {},
 ) {
 
     private val handler = Handler(Looper.getMainLooper())
@@ -154,6 +167,7 @@ class Tracer(
             speaker.speak(next)
         }
         speaking = next
+        onSpeakingChanged(next)
     }
 
     /**
@@ -171,6 +185,7 @@ class Tracer(
         val measured = programmeLufs?.let { "%.1f".format(it) } ?: "unmeasured"
         log("duck target=${"%.1f".format(duck.db)}dB programmeLufs=$measured")
         gain.apply(directive.contentDuck)
+        onDuckChanged(duck)
     }
 
     private fun releaseCause(directive: Directive, events: List<InputEvent>, held: Speaking.Utterance): String = when {
