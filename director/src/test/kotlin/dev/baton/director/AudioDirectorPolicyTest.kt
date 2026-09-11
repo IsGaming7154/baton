@@ -925,6 +925,174 @@ class AudioDirectorPolicyTest : FunSpec({
         session.history.allDrops().shouldBeEmpty()
         session.history.spokenCueIds().shouldBeEmpty()
     }
+
+    // -----------------------------------------------------------------------
+    // The synthetic-speech disclosure.
+    //
+    // One sentence, owed once per session by a synthetic track, admitted by the
+    // same rule as every other scheduled voice. See the AudioDirector class doc
+    // for why it waits for silence, why it outranks the cues, and what ends the
+    // debt.
+    // -----------------------------------------------------------------------
+
+    test("a synthetic track tells the viewer so at the first silence that holds it, ahead of the description due there") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(1_000, 8_000)),
+                cues = listOf(cue("desc", startMs = 1_500, variants = listOf(variant("A gate swings shut.", 1_000)))),
+            ),
+            disclosure = disclosure(2_000),
+        )
+
+        // Dialogue until 1000: nothing, the disclosure included.
+        session.playTo(900).speaking shouldBe Speaking.Silent
+
+        val told = session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        told.id shouldBe AudioDirector.DISCLOSURE_ID
+        told.kind shouldBe UtteranceKind.Scheduled.SYNTHETIC_SPEECH_DISCLOSURE
+        told.cueId shouldBe null
+        told.text shouldBe "Descriptions in this title use a synthetic voice."
+        told.windowEndMs shouldBe 8_000
+        session.history.last().contentDuck shouldBe ContentDuck.Ducked(DirectorConfig.DEFAULT_DUCK_DB)
+
+        // The description came due at 1500 and waits for the floor, as it would
+        // behind any voice; it is not cut in, and it is not dropped.
+        session.playTo(2_900).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().id shouldBe told.id
+        session.playTo(3_000).speaking
+            .shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+            .cueId shouldBe CueId("desc")
+
+        session.playTo(20_000)
+        session.history.scheduledStarts().map { it.id } shouldBe listOf(AudioDirector.DISCLOSURE_ID, UtteranceId("cue:desc"))
+        session.history.allDrops().shouldBeEmpty()
+    }
+
+    test("the disclosure is never spoken over dialogue: a silence too short for it is passed over") {
+        val session = Session(
+            trackOf(
+                // 2000 ms of opening silence cannot hold 2000 ms of disclosure plus
+                // the guard; the second window can.
+                gaps = listOf(Gap(0, 2_000), Gap(4_000, 9_000)),
+                cues = listOf(cue("early", startMs = 500, variants = listOf(variant("Rain.", 1_000)))),
+            ),
+            disclosure = disclosure(2_000),
+        )
+
+        // The price of refusing to wait for a long enough silence before describing
+        // anything, paid in the open: the description that fits the short window
+        // is spoken there, before the viewer has been told.
+        session.playTo(3_900)
+        session.history.scheduledStarts().map { it.id } shouldBe listOf(UtteranceId("cue:early"))
+
+        val told = session.playTo(4_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        told.id shouldBe AudioDirector.DISCLOSURE_ID
+        told.startedAtPositionMs shouldBe 4_000
+        told.windowEndMs shouldBe 9_000
+    }
+
+    test("a disclosure heard in full is not repeated after a seek") {
+        val session = Session(trackOf(gaps = listOf(Gap(0, 20_000))), disclosure = disclosure(1_000))
+
+        session.playTo(3_000)
+        session.history.scheduledStarts() shouldHaveSize 1
+
+        // Back to the top of the film. The cues ahead are released; the viewer has
+        // already been told, and a jump inside the same film does not un-tell them.
+        session.seekTo(0).speaking shouldBe Speaking.Silent
+        session.playTo(10_000)
+        session.history.scheduledStarts() shouldHaveSize 1
+    }
+
+    test("a seek that cuts the disclosure off leaves it owed, and it is spoken again from the top") {
+        val session = Session(trackOf(gaps = listOf(Gap(0, 20_000))), disclosure = disclosure(2_000))
+
+        val first = session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        first.id shouldBe AudioDirector.DISCLOSURE_ID
+
+        // Half a sentence is not a disclosure. The seek tick is silent, as every
+        // seek tick is; the next one starts it again, from the top.
+        session.seekTo(0).speaking shouldBe Speaking.Silent
+        val again = session.tick().speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        again.id shouldBe AudioDirector.DISCLOSURE_ID
+        again.startedAtPositionMs shouldBe 100
+        (again.startedAtMs != first.startedAtMs) shouldBe true
+
+        // This time it is heard to the end, and that discharges it for good.
+        session.playTo(3_000)
+        session.seekTo(0)
+        session.playTo(5_000)
+        session.history.scheduledStarts() shouldHaveSize 2
+    }
+
+    test("a track that is not synthetic owes no disclosure, even when one is handed over") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(0, 20_000)),
+                cues = listOf(cue("desc", startMs = 1_000, variants = listOf(variant("A gate swings shut.", 1_000)))),
+                synthetic = false,
+            ),
+            disclosure = disclosure(1_000),
+        )
+
+        session.playTo(10_000)
+        session.history.scheduledStarts().map { it.id } shouldBe listOf(UtteranceId("cue:desc"))
+    }
+
+    test("a disclosure withdrawn at the end of its silence is not retried") {
+        val session = Session(
+            trackOf(gaps = listOf(Gap(1_000, 3_500), Gap(5_000, 20_000))),
+            speakerReportsCompletion = false,
+            disclosure = disclosure(2_000),
+        )
+
+        session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().id shouldBe
+            AudioDirector.DISCLOSURE_ID
+
+        // Held to the window like any scheduled voice: stopped at the dialogue.
+        session.playTo(3_500).speaking shouldBe Speaking.Withdrawn(
+            Withdrawal(
+                id = AudioDirector.DISCLOSURE_ID,
+                kind = UtteranceKind.Scheduled.SYNTHETIC_SPEECH_DISCLOSURE,
+                reason = WithdrawalReason.OutOfSilence(windowEndMs = 3_500),
+                measuredDurationMs = 2_000,
+                heldForMs = 2_500,
+            ),
+        )
+
+        // Its whole measured length had elapsed before the cut, so the sentence had
+        // been given all of its time; a speaker that did not deliver it in that time
+        // would not deliver it on a second try either, and would take a silence
+        // from the descriptions every time it failed.
+        session.playTo(15_000)
+        session.history.scheduledStarts() shouldHaveSize 1
+        session.history.withdrawals() shouldHaveSize 1
+    }
+
+    test("a description squeezed out while the disclosure speaks is dropped with the disclosure named as the holder") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(1_000, 4_000)),
+                cues = listOf(
+                    // Its room runs out at 2000, where "later" starts.
+                    cue("desc", startMs = 1_200, variants = listOf(variant("A gate swings shut.", 1_000))),
+                    cue("later", startMs = 2_000, variants = listOf(variant("Rain.", 500))),
+                ),
+            ),
+            disclosure = disclosure(2_000),
+        )
+
+        session.playTo(4_000)
+
+        session.history.scheduledStarts().map { it.id } shouldBe
+            listOf(AudioDirector.DISCLOSURE_ID, UtteranceId("cue:later"))
+        session.history.allDrops().single().reason shouldBe DropReason.NoVariantFits(
+            shortestVariantMs = 1_000,
+            availableMs = 800,
+            guardMs = DirectorConfig.DEFAULT_GUARD_MS,
+            floorHeldBy = UtteranceKind.Scheduled.SYNTHETIC_SPEECH_DISCLOSURE,
+            nextCueStartMs = 2_000,
+        )
+    }
 })
 
 /**

@@ -24,7 +24,8 @@ package dev.baton.director
  *
  * 1. Reactive preempts scheduled, always.
  * 2. Among reactive, the most recent user intent wins.
- * 3. Among scheduled, `SPOKEN_SUBTITLE` outranks `AUDIO_DESCRIPTION`.
+ * 3. Among scheduled, the synthetic-speech disclosure outranks `SPOKEN_SUBTITLE`,
+ *    which outranks `AUDIO_DESCRIPTION`.
  * 4. Content dialogue is never spoken over by a scheduled utterance.
  *
  * A cue may start only when
@@ -198,6 +199,63 @@ package dev.baton.director
  * rebaseline; the utterance that was speaking never stopped, so it does not
  * restart. Scheduling resumes exactly where it left off.
  *
+ * ## The synthetic-speech disclosure
+ *
+ * A track marked [DescriptionTrack.synthetic] is spoken by a machine, and the
+ * guidance this project cites (the American Council of the Blind's, per PRD.md) is
+ * that the audience must be told so. Telling them is a voice, so it is arbitrated
+ * here like every other voice. An announcement the app played before starting the
+ * film would be the one utterance in the product that nothing had checked against
+ * the dialogue.
+ *
+ * **It is scheduled speech, and it waits for silence.** "Before the film starts"
+ * is the obvious slot, and it is not one this machine has. The director is told
+ * where the content is and whether it is moving; it has no way to hold the content
+ * back while it talks, and until the player is told to play it reports
+ * [Playback.PAUSED], in which nothing is scheduled at all. Once the film is moving,
+ * the gap map is the only evidence of silence there is. So the disclosure is held
+ * to the rule the cues are held to -- `now + measuredDurationMs + guardMs <=
+ * windowEndMs`, against whatever silence window the playback position is in -- and,
+ * once speaking, to the same window deadline. A film that opens on silence gets it
+ * at the top with no special case; one that opens on dialogue gets it at the first
+ * pause long enough to hold it.
+ *
+ * **It outranks every cue, and it ignores the room the cues reserve.** The point
+ * of it is that the viewer is told early, so it takes the first window that holds
+ * it, ahead of any cue contesting the same free floor. Honouring [CueRooms] would
+ * defeat that. A window with a description in it is reserved from that
+ * description's start onwards, so what is left for anything else is the sliver
+ * before it: on the bundled clip the longest unreserved span anywhere is 2.25 s,
+ * short of the sentence plus the guard at even the authored speaking rate. The
+ * cost of not honouring it is bounded, and reported. A cue that comes due while
+ * the disclosure speaks waits for the floor as it would behind any voice -- this
+ * does not preempt scheduled speech, and scheduled speech does not preempt it --
+ * and one squeezed out entirely is a drop naming the disclosure as the holder.
+ *
+ * What that does not buy is a guarantee that nothing synthetic is heard first. A
+ * description in a window too short for the disclosure still speaks there.
+ * Holding every description back until a long enough silence came along would
+ * trade one sentence of disclosure for however many descriptions a
+ * dialogue-heavy opening holds -- and on a film with no such silence, for all of
+ * them.
+ *
+ * **Owed once per session, and discharged by observation.** The debt is cleared by
+ * one of two things, and nothing else. Either the speaker reports the end of it --
+ * a speaker reports only audio it played to the last frame, and never an utterance
+ * it was told to stop -- or the floor is withdrawn from it. A withdrawal counts
+ * because of what a withdrawal can reach: an utterance admitted on its measured
+ * length can only be cut *past* that length, so the sentence had been given all of
+ * its time, and a speaker that failed to deliver it in that time would fail again
+ * and take a silence from the descriptions on every attempt. Anything else that
+ * ends it early leaves it owed, and it starts again from the top at the next
+ * silence that holds it: a pause, a button press, or a seek, each of which cuts
+ * into the part of the sentence the viewer had not heard yet.
+ *
+ * A seek after it has been heard does not bring it back. A seek releases the cues
+ * ahead of the new position because they describe scenes the viewer is about to
+ * watch again; the disclosure describes the voice, and jumping around inside the
+ * same film does not make the viewer any less told.
+ *
  * ## Deliberate readings of the policy, where it was silent
  *
  * - **Scheduled does not preempt scheduled.** Rule 3 ranks candidates when the
@@ -232,7 +290,23 @@ package dev.baton.director
 class AudioDirector(
     private val track: DescriptionTrack,
     private val config: DirectorConfig = DirectorConfig(),
+    /**
+     * The disclosure sentence, rendered and measured by the caller on the engine
+     * that will speak it, or null when the caller has nothing rendered. Whether it
+     * is owed is decided here from [DescriptionTrack.synthetic], never by the
+     * caller: a disclosure handed over with a track that is not synthetic is not
+     * spoken. See "The synthetic-speech disclosure" above.
+     */
+    private val disclosure: Variant? = null,
 ) {
+
+    /**
+     * Whether this session still owes the viewer the disclosure. Set once, at
+     * construction, and cleared once -- by the speaker reporting the end of it, or
+     * by the floor being withdrawn from it. Nothing sets it again: not a seek, and
+     * not the end of the film.
+     */
+    private var disclosureOwed: Boolean = track.synthetic && disclosure != null
 
     private var lastNowMs: Long? = null
     private var lastPlayback: Playback = Playback.PLAYING
@@ -305,6 +379,12 @@ class AudioDirector(
 
                 is InputEvent.SpeechEnded -> {
                     if (active?.id == event.id) active = null
+                    // Whether or not it still holds the floor by this point in the
+                    // tick. A speaker reports only audio it played to the last frame,
+                    // so this is evidence the viewer heard the sentence even when a
+                    // seek or a button press queued ahead of the report has already
+                    // taken the floor away.
+                    if (event.id == DISCLOSURE_ID) disclosureOwed = false
                 }
 
                 is InputEvent.ReactiveRequested -> {
@@ -435,6 +515,9 @@ class AudioDirector(
             ?: holder.pastWallCeiling(nowMs)
             ?: return null
         active = null
+        // Discharged, not re-owed: a withdrawal only reaches past the measured
+        // length, so the sentence had all of its time. See the class doc.
+        if (withdrawal.id == DISCLOSURE_ID) disclosureOwed = false
         return withdrawal
     }
 
@@ -565,6 +648,11 @@ class AudioDirector(
             }
         }
 
+        // Rule 3's first clause. Taken before the cue contest's winner, and outside
+        // it: the cues above were all assessed regardless, so one that loses the
+        // floor to the disclosure waits exactly as it would behind any voice.
+        if (active == null) active = disclosureThatFits(nowMs, positionMs)
+
         val winner = best
         if (active == null && winner != null) {
             resolved += winner.cue.id
@@ -648,6 +736,35 @@ class AudioDirector(
         return challenger.id.value < incumbent.id.value
     }
 
+    /**
+     * The disclosure, if the session still owes it and the silence at [positionMs]
+     * can hold it.
+     *
+     * The eligibility rule with its cue-specific halves taken out. Bound to the
+     * window the playback position is in, not to one it was written for, because it
+     * was not written for a moment. Bound to that window's end, not to a room,
+     * because it neither reserves room nor honours the room cues reserve: see the
+     * class doc. And not a drop when it does not fit -- the debt belongs to the
+     * session, so it waits for a silence that does.
+     */
+    private fun disclosureThatFits(nowMs: Long, positionMs: Long): Speaking.ScheduledUtterance? {
+        val variant = disclosure?.takeIf { disclosureOwed } ?: return null
+        val windowEndMs = track.silence.windowEndAt(positionMs) ?: return null
+        if (variant.measuredDuration.millis + config.guardMs > windowEndMs - positionMs) return null
+        return Speaking.ScheduledUtterance(
+            id = DISCLOSURE_ID,
+            kind = UtteranceKind.Scheduled.SYNTHETIC_SPEECH_DISCLOSURE,
+            text = variant.text,
+            audioRef = variant.audioRef,
+            startedAtMs = nowMs,
+            cueId = null,
+            variantIndex = 0,
+            duration = variant.measuredDuration,
+            startedAtPositionMs = positionMs,
+            windowEndMs = windowEndMs,
+        )
+    }
+
     private fun ReactiveRequest.takeFloor(nowMs: Long): Speaking.ReactiveUtterance =
         Speaking.ReactiveUtterance(
             id = id,
@@ -674,5 +791,14 @@ class AudioDirector(
          */
         class Fits(val variantIndex: Int, val windowEndMs: Long, val roomEndMs: Long) : Assessment
         class Drop(val reason: DropReason) : Assessment
+    }
+
+    companion object {
+        /**
+         * The disclosure's utterance id. Cue utterances are all `cue:`-prefixed, so it
+         * cannot be mistaken for one; a restart after an interruption is a new
+         * instance by [Speaking.Utterance.startedAtMs], exactly as a replayed cue is.
+         */
+        val DISCLOSURE_ID: UtteranceId = UtteranceId("disclosure")
     }
 }

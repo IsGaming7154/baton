@@ -76,7 +76,16 @@ sealed interface Speaking {
         override val text: String,
         override val audioRef: String?,
         override val startedAtMs: Long,
-        val cueId: CueId,
+        /**
+         * The cue being spoken, or null for the synthetic-speech disclosure, which
+         * belongs to the playback session rather than to any moment in the track.
+         *
+         * Null and not a reserved id, because any id reserved here is one a track
+         * is free to have authored for a cue of its own. The kind says the same
+         * thing, and the two are made to agree below rather than trusted to.
+         */
+        val cueId: CueId?,
+        /** Which of the cue's variants was chosen. Always 0 for the disclosure, which has one. */
         val variantIndex: Int,
         val duration: MeasuredDurationMs,
         /** Content position at which this utterance began. */
@@ -119,6 +128,10 @@ sealed interface Speaking {
             // brought into existence -- so no deadline downstream has to cope with
             // one, and no cue can be starved by a neighbour that took the whole
             // window because nobody was counting.
+            require((cueId == null) == (kind == UtteranceKind.Scheduled.SYNTHETIC_SPEECH_DISCLOSURE)) {
+                "utterance $id: only the disclosure speaks without a cue, and the disclosure " +
+                    "never speaks one (kind $kind, cue $cueId)"
+            }
             require(roomEndMs <= windowEndMs) {
                 "utterance $id was granted room to $roomEndMs, past the silence " +
                     "window it sits in (ends $windowEndMs)"

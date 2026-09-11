@@ -96,6 +96,13 @@ data class Cue(
 ) {
     init {
         require(startMs >= 0) { "cue $id starts at $startMs; the timeline begins at 0" }
+        // Refused at load rather than at play time: a cue of this kind would reach
+        // the director carrying a cue id, which a disclosure utterance cannot have,
+        // and fail mid-film instead of here.
+        require(kind != UtteranceKind.Scheduled.SYNTHETIC_SPEECH_DISCLOSURE) {
+            "cue $id: the synthetic-speech disclosure is owed once per session and scheduled " +
+                "by the director; a track cannot place it at a moment"
+        }
         require(variants.zipWithNext().all { (a, b) -> a.measuredDuration >= b.measuredDuration }) {
             "cue $id: variants must be ordered longest first, was " +
                 variants.map { it.measuredDuration.millis }
@@ -236,9 +243,10 @@ class CueRooms private constructor(private val roomEndByCueId: Map<CueId, Long>)
 /**
  * The contract between the offline pipeline and the runtime.
  *
- * [synthetic] is load-bearing rather than decorative: the app reads it to decide
- * whether to make the ACB transparency announcement that the speech the listener
- * is about to hear was machine-generated.
+ * [synthetic] is load-bearing rather than decorative: the director reads it to
+ * decide whether the session owes the ACB transparency announcement -- one spoken
+ * sentence telling the listener that the speech they are hearing is
+ * machine-generated. See [AudioDirector].
  */
 data class DescriptionTrack(
     val formatVersion: Int,

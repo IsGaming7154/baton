@@ -148,7 +148,7 @@ fun DescriptionTrack.playedThrough(durationMs: Long, stepMs: Long = 100L): Playt
         drops += directive.drops
         val utterance = directive.speaking as? Speaking.ScheduledUtterance
         if (utterance != null && (last == null || last.id != utterance.id || last.startedAtMs != utterance.startedAtMs)) {
-            spoken += utterance.cueId
+            utterance.cueId?.let { spoken += it }
         }
         last = utterance
         positionMs += stepMs

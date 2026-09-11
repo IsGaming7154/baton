@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
                         player.sampleLevelGain
                     },
                     speaker = audioSpeaker,
-                    director = AudioDirector(prepared.track, DirectorConfig()),
+                    director = AudioDirector(prepared.track, DirectorConfig(), prepared.disclosure),
                     log = ::log,
                     onDuckChanged = if (overlayEnabled) {
                         { duck -> overlayState = overlayState.copy(duckTargetDb = duck.db) }

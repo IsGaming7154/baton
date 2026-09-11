@@ -158,7 +158,7 @@ class Tracer(
         if (next != null) {
             if (next is Speaking.ScheduledUtterance) {
                 log(
-                    "cue start id=${next.id} kind=${next.kind} cue=${next.cueId} variant=${next.variantIndex} " +
+                    "cue start id=${next.id} kind=${next.kind} cue=${next.cueId ?: "none"} variant=${next.variantIndex} " +
                         "atPositionMs=$positionMs measuredMs=${next.duration.millis} endsAtMs=${next.endsAtPositionMs}",
                 )
             } else {

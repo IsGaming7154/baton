@@ -68,6 +68,13 @@ class AudioDirectorInvariantTest : FunSpec({
             (seen.withdrawnDuringStall > 3) shouldBe true
             (seen.stallDuringSpeech > 300) shouldBe true
             (seen.stallAnomalies > 15) shouldBe true
+            // The disclosure: spoken, interrupted and spoken again, withdrawn and
+            // therefore discharged, and -- the case the "goes first" check reads
+            // -- cues starting while it was still owed but did not fit.
+            (seen.disclosureStarted > 90) shouldBe true
+            (seen.disclosureRestarted > 55) shouldBe true
+            (seen.disclosureWithdrawn > 2) shouldBe true
+            (seen.cueStartedWhileDisclosureOwed > 50) shouldBe true
         }
     }
 })
@@ -97,15 +104,15 @@ private fun drive(
     config: DirectorConfig = DirectorConfig(),
     coverage: Coverage = Coverage(),
 ) {
-    val director = AudioDirector(scenario.track, config)
-    val invariants = Invariants(scenario.track, config)
+    val director = AudioDirector(scenario.track, config, scenario.disclosure)
+    val invariants = Invariants(scenario.track, config, scenario.disclosure)
     val speaker = FakeSpeaker()
 
     var nowMs = 0L
     var positionMs = 0L
     var playback = Playback.PLAYING
     var previous: Speaking = Speaking.Silent
-    val cueStarts = mutableMapOf<CueId, Long>()
+    val starts = mutableMapOf<UtteranceId, Long>()
 
     scenario.steps.forEachIndexed { index, step ->
         nowMs += step.dtMs
@@ -132,7 +139,10 @@ private fun drive(
 
         val directive = director.advance(nowMs, DirectorInputs(positionMs, playback, events))
         invariants.check(index, nowMs, positionMs, playback, events, directive)
-        coverage.record(scenario.track, previous, directive, positionMs, events, previousPlayback, playback, cueStarts)
+        coverage.record(
+            scenario.track, previous, directive, positionMs, events, previousPlayback, playback, starts,
+            disclosureOwed = invariants.disclosureOwed,
+        )
         previous = directive.speaking
     }
 }
@@ -185,6 +195,10 @@ private class Coverage {
     var withdrawnDuringStall = 0
     var stallDuringSpeech = 0
     var stallAnomalies = 0
+    var disclosureStarted = 0
+    var disclosureRestarted = 0
+    var disclosureWithdrawn = 0
+    var cueStartedWhileDisclosureOwed = 0
 
     fun record(
         track: DescriptionTrack,
@@ -194,7 +208,8 @@ private class Coverage {
         events: List<InputEvent>,
         previousPlayback: Playback,
         playback: Playback,
-        cueStarts: MutableMap<CueId, Long>,
+        starts: MutableMap<UtteranceId, Long>,
+        disclosureOwed: Boolean,
     ) {
         ticks++
         if (!track.silence.isSilentAt(positionMs)) dialogueTicks++
@@ -209,13 +224,16 @@ private class Coverage {
             is Speaking.ScheduledUtterance -> {
                 scheduledSpeaking++
                 if (positionMs >= speaking.endsAtPositionMs) overranMeasuredLength++
-                val firstStart = cueStarts[speaking.cueId]
+                val disclosing = speaking.cueId == null
+                val firstStart = starts[speaking.id]
+                val started = firstStart != speaking.startedAtMs
                 if (firstStart == null) {
-                    cueStarts[speaking.cueId] = speaking.startedAtMs
-                } else if (firstStart != speaking.startedAtMs) {
-                    cueReplayedAfterSeek++
-                    cueStarts[speaking.cueId] = speaking.startedAtMs
+                    if (disclosing) disclosureStarted++
+                } else if (started) {
+                    if (disclosing) disclosureRestarted++ else cueReplayedAfterSeek++
                 }
+                if (started && !disclosing && disclosureOwed) cueStartedWhileDisclosureOwed++
+                starts[speaking.id] = speaking.startedAtMs
             }
         }
 
@@ -234,6 +252,7 @@ private class Coverage {
                 is WithdrawalReason.NeverMeasured -> withdrawnNeverMeasured++
             }
             if (playback == Playback.STALLED) withdrawnDuringStall++
+            if (it.kind == UtteranceKind.Scheduled.SYNTHETIC_SPEECH_DISCLOSURE) disclosureWithdrawn++
         }
         if (directive.stall != null) stallAnomalies++
 
@@ -254,7 +273,9 @@ private class Coverage {
         "replayed=$cueReplayedAfterSeek overran=$overranMeasuredLength " +
         "outOfSilence=$withdrawnOutOfSilence overdue=$withdrawnSpeakerOverdue " +
         "neverMeasured=$withdrawnNeverMeasured withdrawnDuringStall=$withdrawnDuringStall " +
-        "stallAnomalies=$stallAnomalies)"
+        "stallAnomalies=$stallAnomalies disclosureStarted=$disclosureStarted " +
+        "disclosureRestarted=$disclosureRestarted disclosureWithdrawn=$disclosureWithdrawn " +
+        "cueStartedWhileDisclosureOwed=$cueStartedWhileDisclosureOwed)"
 }
 
 /**
@@ -265,7 +286,17 @@ private class Coverage {
 private class Invariants(
     private val track: DescriptionTrack,
     private val config: DirectorConfig,
+    private val disclosure: Variant?,
 ) {
+    /**
+     * The session's debt, reconstructed from the outside: owed by a synthetic track
+     * that was handed a disclosure, and cleared by a speaker report naming it or by
+     * a withdrawal of it -- both of which are visible in the stream. See
+     * [checkDisclosure].
+     */
+    var disclosureOwed = track.synthetic && disclosure != null
+        private set
+
     private var previous: Directive? = null
     private var previousPlayback = Playback.PLAYING
     private val issued = mutableMapOf<UtteranceId, ReactiveRequest>()
@@ -305,7 +336,11 @@ private class Invariants(
             checkStall(directive, playback)
             checkNobodyWasCutOff(directive, playback, events)
             checkSeekLeavesSilence(directive, events)
+            checkDisclosure(directive, positionMs, events)
         }
+        // After the checks: the tick that withdraws the disclosure names nothing, so
+        // it is the following ticks that must not name it again.
+        if (directive.withdrawal?.id == AudioDirector.DISCLOSURE_ID) disclosureOwed = false
 
         previous = directive
         previousPlayback = playback
@@ -356,12 +391,21 @@ private class Invariants(
             playback shouldNotBe Playback.PAUSED
         }
 
-        val cue = track.cues.single { it.id == speaking.cueId }
-        withClue("a scheduled utterance must quote its cue faithfully") {
-            speaking.kind shouldBe cue.kind
-            (speaking.variantIndex in cue.variants.indices) shouldBe true
-            speaking.text shouldBe cue.variants[speaking.variantIndex].text
-            speaking.duration shouldBe cue.variants[speaking.variantIndex].measuredDuration
+        val cueId = speaking.cueId
+        if (cueId == null) {
+            withClue("the disclosure must quote the sentence it was handed") {
+                speaking.kind shouldBe UtteranceKind.Scheduled.SYNTHETIC_SPEECH_DISCLOSURE
+                speaking.text shouldBe disclosure?.text
+                speaking.duration shouldBe disclosure?.measuredDuration
+            }
+        } else {
+            val cue = track.cues.single { it.id == cueId }
+            withClue("a scheduled utterance must quote its cue faithfully") {
+                speaking.kind shouldBe cue.kind
+                (speaking.variantIndex in cue.variants.indices) shouldBe true
+                speaking.text shouldBe cue.variants[speaking.variantIndex].text
+                speaking.duration shouldBe cue.variants[speaking.variantIndex].measuredDuration
+            }
         }
 
         val grantedWindowEnd = track.silence.windowEndAt(speaking.startedAtPositionMs)
@@ -400,17 +444,56 @@ private class Invariants(
             )
             (positionMs < deadlineMs) shouldBe true
         }
+        // The rest is about cues. The disclosure's own once-only rule is not keyed to
+        // seeks at all, and lives in checkDisclosure.
+        if (cueId == null) return
         withClue("a cue that was reported as dropped is speaking anyway") {
-            droppedSinceSeek.contains(speaking.cueId) shouldBe false
+            droppedSinceSeek.contains(cueId) shouldBe false
         }
 
-        val firstStart = spokenSinceSeek[speaking.cueId]
+        val firstStart = spokenSinceSeek[cueId]
         if (firstStart == null) {
-            spokenSinceSeek[speaking.cueId] = speaking.startedAtMs
+            spokenSinceSeek[cueId] = speaking.startedAtMs
         } else {
             withClue("a cue started a second time without an intervening seek") {
                 speaking.startedAtMs shouldBe firstStart
             }
+        }
+    }
+
+    /**
+     * The disclosure is spoken only while it is owed, and while it is owed it goes
+     * first.
+     *
+     * "Only while owed" is the once-per-session rule stated so that interruptions
+     * are allowed for: a disclosure cut off by a seek, a pause or a button press may
+     * start again, but one the speaker reported finishing, or one withdrawn at a
+     * deadline, may never be named again -- and one a track that is not synthetic
+     * never owed may never be named at all. The rest of what a scheduled voice owes
+     * the dialogue, it owes through [checkScheduled] like any cue.
+     *
+     * "Goes first" is checked where it can be broken: on the tick a cue starts. If
+     * the disclosure was still owed then, it must not have fitted the silence at
+     * that position, or the cue took a floor the policy gave to the disclosure.
+     */
+    private fun checkDisclosure(directive: Directive, positionMs: Long, events: List<InputEvent>) {
+        if (events.any { it is InputEvent.SpeechEnded && it.id == AudioDirector.DISCLOSURE_ID }) {
+            disclosureOwed = false
+        }
+        val speaking = directive.speaking as? Speaking.ScheduledUtterance ?: return
+        if (speaking.cueId == null) {
+            withClue("the disclosure was named when nothing was owed: already heard, or never synthetic") {
+                disclosureOwed shouldBe true
+            }
+            return
+        }
+
+        val before = previous?.speaking as? Speaking.Utterance
+        val cueStarted = before == null || before.id != speaking.id || before.startedAtMs != speaking.startedAtMs
+        val owed = disclosure?.takeIf { disclosureOwed && cueStarted } ?: return
+        val windowEndMs = track.silence.windowEndAt(positionMs) ?: return
+        withClue("a cue took a silence that the disclosure was owed and fitted") {
+            (owed.measuredDuration.millis + config.guardMs > windowEndMs - positionMs) shouldBe true
         }
     }
 

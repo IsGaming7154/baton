@@ -39,7 +39,7 @@ internal class Step(
     val reportPhantomEnd: Boolean,
 )
 
-internal class Scenario(val track: DescriptionTrack, val steps: List<Step>)
+internal class Scenario(val track: DescriptionTrack, val steps: List<Step>, val disclosure: Variant?)
 
 /**
  * Most scenarios are shaped like a film: dialogue and silence alternating, cues
@@ -65,12 +65,27 @@ internal val scenarios: Arb<Scenario> = arbitrary { rs: RandomSource ->
             locale = "en-US",
             gapMap = gaps,
             cues = if (filmLike) filmLikeCues(random, gaps) else chaoticCues(random, gaps),
+            synthetic = random.nextInt(6) != 0,
         ),
         steps = randomSteps(random),
+        disclosure = randomDisclosure(random),
     )
 }
 
 private fun Random.between(from: Long, until: Long): Long = if (until <= from) from else nextLong(from, until)
+
+/**
+ * The disclosure sized the way a cue is: usually a length some generated gap can
+ * hold, sometimes one no gap in the film can, and sometimes none at all -- the
+ * caller with nothing rendered. Paired with a track that is sometimes not synthetic,
+ * so "handed a disclosure" and "owes one" are not the same fact in the generated runs
+ * either.
+ */
+private fun randomDisclosure(random: Random): Variant? = when (random.nextInt(8)) {
+    0 -> null
+    1 -> Variant("disclosure", measuredMs(60_000L))
+    else -> Variant("disclosure", measuredMs(random.between(1, 1_800)))
+}
 
 /** Dialogue and silence alternating from the top of the film. */
 private fun filmLikeGaps(random: Random): List<Gap> {

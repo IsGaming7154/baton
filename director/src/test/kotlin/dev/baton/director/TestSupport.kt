@@ -18,14 +18,18 @@ fun cue(
     variants: List<Variant>,
 ): Cue = Cue(id = CueId(id), startMs = startMs, kind = kind, variants = variants)
 
-fun trackOf(gaps: List<Gap> = emptyList(), cues: List<Cue> = emptyList()): DescriptionTrack =
+fun trackOf(gaps: List<Gap> = emptyList(), cues: List<Cue> = emptyList(), synthetic: Boolean = true): DescriptionTrack =
     DescriptionTrack(
         formatVersion = DescriptionTrack.CURRENT_FORMAT_VERSION,
         sourceId = "test-fixture",
         locale = "en-US",
         gapMap = gaps,
         cues = cues,
+        synthetic = synthetic,
     )
+
+/** The disclosure as the app would hand it over: one sentence, measured off rendered frames. */
+fun disclosure(millis: Long): Variant = variant("Descriptions in this title use a synthetic voice.", millis)
 
 fun uiNarration(id: String, text: String = "Play", millis: Long? = null): ReactiveRequest =
     ReactiveRequest(
@@ -61,8 +65,9 @@ class Session(
     val track: DescriptionTrack,
     val config: DirectorConfig = DirectorConfig(),
     private val speakerReportsCompletion: Boolean = true,
+    disclosure: Variant? = null,
 ) {
-    private val director = AudioDirector(track, config)
+    private val director = AudioDirector(track, config, disclosure)
     private var speaking: Speaking.Utterance? = null
 
     var nowMs: Long = 0L
@@ -149,17 +154,19 @@ class Session(
     }
 }
 
-/** Every cue the director actually started, in the order it started them. */
-fun List<Directive>.spokenCueIds(): List<CueId> =
+/** Every scheduled utterance the director started, disclosure included, one entry per instance. */
+fun List<Directive>.scheduledStarts(): List<Speaking.ScheduledUtterance> =
     mapNotNull { (it.speaking as? Speaking.ScheduledUtterance) }
-        .fold(mutableListOf<Speaking.ScheduledUtterance>()) { acc, utterance ->
+        .fold(mutableListOf()) { acc, utterance ->
             val previous = acc.lastOrNull()
             if (previous == null || previous.id != utterance.id || previous.startedAtMs != utterance.startedAtMs) {
                 acc += utterance
             }
             acc
         }
-        .map { it.cueId }
+
+/** Every cue the director actually started, in the order it started them. */
+fun List<Directive>.spokenCueIds(): List<CueId> = scheduledStarts().mapNotNull { it.cueId }
 
 fun List<Directive>.allDrops(): List<DroppedCue> = flatMap { it.drops }
 

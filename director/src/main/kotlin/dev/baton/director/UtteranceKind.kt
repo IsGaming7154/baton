@@ -29,7 +29,26 @@ sealed interface UtteranceKind {
      * otherwise lose entirely, while a description carries scenery.
      */
     enum class Scheduled(val priority: Int) : UtteranceKind {
-        SPOKEN_SUBTITLE(0),
-        AUDIO_DESCRIPTION(1),
+        /**
+         * The one sentence telling the viewer that the speech on this track is
+         * synthetic. Owed once per session by a track marked
+         * [DescriptionTrack.synthetic]; see [AudioDirector] on when it is spoken.
+         *
+         * Scheduled, because nothing about being a disclosure entitles it to talk
+         * over an actor: it is held to silence exactly as a cue is. A kind of its
+         * own rather than filed under [AUDIO_DESCRIPTION], because every report the
+         * director makes names a kind -- a drop's `floorHeldBy`, a withdrawal, the
+         * tracer's log -- and under a borrowed name a description squeezed out by
+         * the disclosure would read as squeezed out by a description the track does
+         * not contain.
+         *
+         * It is never a cue. A track cannot place it at a moment ([Cue] refuses the
+         * kind), because what it discloses is true of the whole session and not of
+         * one scene -- so its [priority] is not consulted by the cue contest at all.
+         * The number says what the policy does: it goes first.
+         */
+        SYNTHETIC_SPEECH_DISCLOSURE(0),
+        SPOKEN_SUBTITLE(1),
+        AUDIO_DESCRIPTION(2),
     }
 }
