@@ -8,7 +8,13 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Surface
 import dev.baton.director.AudioDirector
 import dev.baton.director.DirectorConfig
@@ -40,8 +46,19 @@ class MainActivity : ComponentActivity() {
     private var speaker: RenderedAudioSpeaker? = null
     private var synth: SpeechSynth? = null
 
+    /**
+     * The demo overlay (see `DemoOverlay.kt`): off by default, on with `--ez
+     * overlay true`, same launch-extra pattern as `seekMs`/`playForMs`/
+     * `staticDuck` below. It exists because a 2026-09-10 listening test could
+     * not hear the adaptive duck against the static one on the same scene, so
+     * a demo video has to show it instead -- see `FRICTION_LOG.md`.
+     */
+    private var overlayEnabled = false
+    private var overlayState by mutableStateOf(OverlayState())
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        overlayEnabled = intent.getBooleanExtra("overlay", false)
 
         player = BatonPlayer(this, ::log)
         player.setSource(Uri.parse("android.resource://$packageName/${R.raw.sample_clip}"))
@@ -52,6 +69,12 @@ class MainActivity : ComponentActivity() {
                     exoPlayer = player.exoPlayer,
                     modifier = Modifier.fillMaxSize(),
                 )
+                if (overlayEnabled) {
+                    DemoOverlay(
+                        state = overlayState,
+                        modifier = Modifier.align(Alignment.TopStart).padding(32.dp),
+                    )
+                }
             }
         }
 
@@ -95,6 +118,16 @@ class MainActivity : ComponentActivity() {
                     speaker = audioSpeaker,
                     director = AudioDirector(prepared.track, DirectorConfig()),
                     log = ::log,
+                    onDuckChanged = if (overlayEnabled) {
+                        { duck -> overlayState = overlayState.copy(duckTargetDb = duck.db) }
+                    } else {
+                        {}
+                    },
+                    onSpeakingChanged = if (overlayEnabled) {
+                        { utterance -> overlayState = overlayState.copy(speaking = utterance) }
+                    } else {
+                        {}
+                    },
                 )
                 tracer = running
                 player.onSeek(running::onSeek)
@@ -137,6 +170,17 @@ class MainActivity : ComponentActivity() {
                     "sinkLatencyMs=${gain.writtenPositionMs() - positionMs} " +
                     "programmeLufs=${gain.shortTermLufs()?.let { "%.1f".format(it) } ?: "unmeasured"}",
             )
+            // The overlay's other two readings ride this same once-a-second
+            // heartbeat rather than a clock of their own -- both are continuous
+            // measurements with no discrete "changed" moment to hook, unlike the
+            // duck target and the speaking text, which Tracer pushes the instant
+            // they change (see Tracer.onDuckChanged / onSpeakingChanged).
+            if (overlayEnabled) {
+                overlayState = overlayState.copy(
+                    shortTermLufs = gain.shortTermLufs(),
+                    appliedVolume = player.exoPlayer.volume,
+                )
+            }
             handler.postDelayed(this, 1_000L)
         }
     }
