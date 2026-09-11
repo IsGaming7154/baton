@@ -3,7 +3,9 @@ package dev.baton.player
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.OptIn
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -117,8 +119,8 @@ class BatonPlayer(context: Context, log: (String) -> Unit = {}) {
         }
     }
 
-    fun setSource(uri: Uri) {
-        exoPlayer.setMediaItem(MediaItem.fromUri(uri))
+    fun setSource(uri: Uri, subtitleUri: Uri? = null) {
+        exoPlayer.setMediaItem(mediaItem(uri, subtitleUri))
         exoPlayer.prepare()
     }
 
@@ -164,3 +166,44 @@ class BatonPlayer(context: Context, log: (String) -> Unit = {}) {
             }
     }
 }
+
+/**
+ * Builds the [MediaItem] that [BatonPlayer.setSource] loads, with an optional
+ * subtitle sidecar attached as a single [MediaItem.SubtitleConfiguration].
+ *
+ * Nothing here configures a track selector, and none is needed: in Media3
+ * 1.4.1 a text track carrying `C.SELECTION_FLAG_DEFAULT` is selected by the
+ * stock `DefaultTrackSelector` without any parameters being set -- the flag is
+ * an alternative that makes the track eligible on its own
+ * (`DefaultTrackSelector$TextTrackInfo` constructor, 1.4.1,
+ * DefaultTrackSelector.java:4021-4029), and it also ranks the track first
+ * among the eligible ones (`TextTrackInfo.compareTo`, 1.4.1,
+ * DefaultTrackSelector.java:4046-4069, `isDefault` compared false-first).
+ * Selection is the only step that would need code; rendering is already wired,
+ * because the `PlayerView` in `BatonPlayerSurface` inflates Media3's default
+ * `exo_player_view` layout, which carries an `exo_subtitles` view that the
+ * constructor binds and `setPlayer`/`onCues` feed (`PlayerView` constructor,
+ * 1.4.1, PlayerView.java:548).
+ *
+ * Pure on purpose: no `ExoPlayer`, no `Looper`, so the one thing worth
+ * checking -- that the subtitle really is attached, with the SubRip MIME type
+ * -- can be checked in a plain unit test. See `BatonPlayerMediaItemTest`.
+ * (`internal` would be the honest visibility, but this AGP/Kotlin setup does
+ * not make the unit-test compilation a friend path, so it would not compile.)
+ */
+@OptIn(UnstableApi::class)
+fun mediaItem(contentUri: Uri, subtitleUri: Uri?): MediaItem =
+    MediaItem.Builder()
+        .setUri(contentUri)
+        .apply {
+            if (subtitleUri != null) setSubtitleConfigurations(
+                listOf(
+                    MediaItem.SubtitleConfiguration.Builder(subtitleUri)
+                        .setMimeType(MimeTypes.APPLICATION_SUBRIP)
+                        .setLanguage("en")
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .build(),
+                ),
+            )
+        }
+        .build()

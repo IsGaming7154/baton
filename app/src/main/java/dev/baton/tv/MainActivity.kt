@@ -61,7 +61,15 @@ class MainActivity : ComponentActivity() {
         overlayEnabled = intent.getBooleanExtra("overlay", false)
 
         player = BatonPlayer(this, ::log)
-        player.setSource(Uri.parse("android.resource://$packageName/${R.raw.sample_clip}"))
+        // The subtitle sidecar ships ahead of the clip it was authored for: a
+        // parallel job swaps `sample_clip.mp4` for the Sintel excerpt, and this
+        // URI is already pointing at its English track so that swap needs no
+        // code here. `mediaItem` (see BatonPlayer.kt) is what turns it into a
+        // default-flagged SubRip track; rendering is the stock `PlayerView`.
+        player.setSource(
+            Uri.parse("android.resource://$packageName/${R.raw.sample_clip}"),
+            Uri.parse("android.resource://$packageName/${R.raw.sample_clip_en}"),
+        )
 
         setContent {
             Surface(modifier = Modifier.fillMaxSize()) {
