@@ -87,11 +87,15 @@ import kotlin.math.tanh
  * exciter, and won a listening comparison against gentler settings. It was
  * wrong. Every listening test to that point had auditioned dry speech in
  * silence, a condition this voice never occurs in. Scored with ESTOI against
- * the film bed at the signal-to-noise ratios the product actually sees, that
- * version measured no better than doing nothing at all: more impressive alone,
- * worth nothing once the film is playing. Moving the lift from 3.8 kHz to
- * 1.6 kHz and widening it, with everything else held constant, recovered a
- * consistent gain over unprocessed at every level tested.
+ * the real film bed at the signal-to-noise ratios the product actually sees,
+ * that version does move the needle at fixed SNR -- +0.054 to +0.067 ESTOI
+ * over unprocessed at +6/0/-6 dB -- but under the director's own duck, where
+ * the bed is already pulled down to protect the voice, its edge collapses to
+ * +0.005 and is positive in only 23 of 36 utterance/cue pairs: not a result.
+ * Moving the lift from 3.8 kHz to 1.6 kHz and widening it, with everything
+ * else held constant, is worth a further +0.006 to +0.008 at fixed SNR and
+ * +0.005 under the duck -- the shipped chain reaches +0.069 to +0.082 over
+ * unprocessed at fixed SNR, and +0.015 (27 of 36 pairs) once ducked.
  *
  * Two lessons worth keeping next to the numbers. For speech that will always be
  * heard against something else, tuning it in isolation optimises the wrong

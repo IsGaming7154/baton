@@ -15,13 +15,20 @@ data class SubtitleLine(val startMs: Long, val endMs: Long, val text: String)
  * own `SubripParser` imports `android.text.Html`, which is to say it needs Android,
  * which this module deliberately does not.
  *
- * WebVTT is detected by its `WEBVTT` header (after an optional BOM); anything else
- * is treated as SubRip. The two formats differ only in timestamp punctuation and
- * in the ornaments WebVTT allows -- cue identifiers, cue settings, `NOTE`/`STYLE`/
- * `REGION` blocks -- none of which survive into a [SubtitleLine]. A cue whose text
- * is empty once markup is stripped is skipped. A malformed timing line, or a cue
- * that ends before it starts, throws [IllegalArgumentException] naming the cue's
- * position in the file; refusing bad input at the boundary is this module's style.
+ * SubRip and WebVTT are parsed by the same path with no format detection at all --
+ * the two formats differ only in timestamp punctuation and in the ornaments WebVTT
+ * allows -- cue identifiers, cue settings, `NOTE`/`STYLE`/`REGION` blocks -- none
+ * of which survive into a [SubtitleLine]. A block is skipped outright when its
+ * first line starts with `WEBVTT`, `NOTE`, `STYLE` or `REGION`, which is what
+ * keeps a VTT file's header and cue-less blocks out of the output; a SubRip file
+ * simply never produces one. Otherwise a block just needs a line containing
+ * `-->` -- its timing regex accepts both SRT's comma and VTT's dot decimal
+ * separator and an optional hours group, so the same parse reads either format's
+ * timestamps, and anything before that line (a cue identifier) or after the
+ * timestamps on it (cue settings) is never inspected. A cue whose text is empty
+ * once markup is stripped is skipped. A malformed timing line, or a cue that ends
+ * before it starts, throws [IllegalArgumentException] naming the cue's position
+ * in the file; refusing bad input at the boundary is this module's style.
  */
 fun parseSubtitles(source: String): List<SubtitleLine> {
     val lines = source.removePrefix("\uFEFF").split(Regex("""\r\n|\r|\n"""))

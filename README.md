@@ -248,7 +248,7 @@ The only voice this hardware will provision is IVONA `kajal`, whose usable energ
 
 The presence lift is at 1.6 kHz and the exciter is nearly off, and both look wrong to anyone who has reached for a presence control. They come from ANSI S3.5-1997's Band Importance Functions, which measure the share of intelligibility each band carries: it peaks at **1600 Hz (10.2%)**, is **6.7% at 4 kHz**, and **0.84% at 8 kHz**. The band an engineer reaches for to make a voice sound clear is not the band that carries whether the words are understood.
 
-`SpeechClarity`'s own source comment records the wrong turn that led there: an earlier version put +6 dB at 3.8 kHz with a much larger exciter and won a listening comparison — auditioned dry, in silence, a condition this voice never occurs in. Scored with ESTOI against the film bed at the signal-to-noise ratios the product actually sees, it measured no better than doing nothing at all. Speech that will always be heard against something else has to be tuned against something else.
+`SpeechClarity`'s own source comment records the wrong turn that led there: an earlier version put +6 dB at 3.8 kHz with a much larger exciter and won a listening comparison — auditioned dry, in silence, a condition this voice never occurs in. Scored with ESTOI against the real Tears of Steel bed at the signal-to-noise ratios the product actually sees, that old tuning does beat doing nothing at fixed SNR — +0.054 to +0.067 ESTOI over unprocessed at +6/0/−6 dB — but under the director's own duck, where the bed is already pulled down to protect the voice, its edge collapses to +0.005 and is positive in only 23 of 36 utterance/cue pairs: not a result. The shipped chain holds up better ducked — +0.069 to +0.082 over unprocessed at fixed SNR, +0.015 and 27 of 36 pairs once ducked — and moving the lift alone from 3.8 kHz to 1600 Hz, everything else unchanged, is worth a further +0.006 to +0.008 at fixed SNR and +0.005 under the duck. Speech that will always be heard against something else has to be tuned against something else.
 
 One cross-module hazard worth naming, since nothing else would catch it: `SpeechClarity.Settings.targetLkfs` and `DirectorConfig.DEFAULT_NARRATION_LKFS` are the same number in two modules, and if they drift every duck in the product is wrong by the difference while nothing fails. A test pins them together.
 
@@ -268,8 +268,8 @@ The feature request writes itself, because Amazon has already built it. `@amazon
 
 | Number | Source |
 |---|---|
-| 247 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
-| APK 32,414,165 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
+| 281 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
+| APK 32,457,961 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
 | Demo clip: 89.4 s, 854×356 H.264, AAC 48 kHz stereo | `ffprobe` |
 | Demo clip: −24.0 LUFS integrated, LRA 13.9 LU | `ffmpeg -af ebur128` |
 | −23.0 / −33.0 LUFS on EBU Tech 3341 signals | `:loudness` tests, run here |
