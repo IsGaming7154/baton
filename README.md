@@ -64,9 +64,9 @@ Gradle 8.7 comes from the wrapper. AGP 8.6.1, Kotlin 1.9.24 and every dependency
 
 This is the command that is known to work. Run here with `--rerun-tasks`, so nothing was taken from the cache, it ends in `BUILD SUCCESSFUL`. Counting the JUnit XML it leaves behind under each module's `build/test-results`:
 
-**247 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
+**281 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
 
-That is 198 distinct tests; the Android modules run their suites for both the debug and release variants, which is where the other 49 executions come from. The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,414,165 bytes.
+That is 230 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants, which accounts for 50 of the other 51 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,457,961 bytes.
 
 Nothing here needs a device, a network, an emulator, or an AWS account. `:director`, `:loudness` and `:pipeline` are pure-JVM modules and their tests are plain JUnit.
 
