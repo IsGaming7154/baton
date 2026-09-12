@@ -31,7 +31,9 @@ package dev.baton.director
  * A cue may start only when
  * `now >= cue.startMs && now + variant.measuredDurationMs + guardMs <= roomEndMs`,
  * where `roomEndMs` is the end of the silence window the cue was written for, or
- * the start of the next cue written into that same window, whichever comes first.
+ * the start of the next cue written into that same window, whichever comes first
+ * -- and for a spoken subtitle, the next spoken subtitle; see "Subtitles are
+ * bookings, not competitors" below.
  * The longest variant satisfying that wins. If none does, the cue is dropped and
  * the drop is reported with a reason.
  *
@@ -47,6 +49,32 @@ package dev.baton.director
  * computed from how loud the content actually is at the cue, so that the
  * narration ends up a fixed loudness difference above the bed rather than a fixed
  * number of decibels above wherever the bed happened to be. See [duckFor].
+ *
+ * ## Subtitles are bookings, not competitors
+ *
+ * Rule 3 ranks a subtitle above a description, but a ranking only settles a tie for
+ * a free floor. Scheduled speech does not preempt scheduled speech, so a
+ * description that started in a silence and was still speaking when a subtitle
+ * came due would cost the subtitle its turn: dialogue meaning traded for scenery,
+ * the trade rule 3 exists to refuse. Subtitle lines are known in advance -- they
+ * come from the subtitle file, not from the player -- so rather than compete for
+ * the floor they are booked against the timeline before descriptions are placed,
+ * and the eligibility boundary widens from "the next line of dialogue" to
+ * `nextBlockingEventMs = min(nextDialogueOnsetMs, nextBookedSubtitleStartMs)`.
+ *
+ * A booking is a `SPOKEN_SUBTITLE` cue. It reserves its start against anything that
+ * would still be speaking when it arrives, and its room against anything written
+ * inside it, for as long as the subtitle is still due; [CueRooms] says exactly what
+ * that is and why. A cue that cannot finish before a booking is dropped with
+ * [DropReason.RunsIntoBookedSubtitle], naming the subtitle, so that the drop reads
+ * as the trade it is. On dense foreign-language content descriptions will be
+ * dropped more often, and that is the correct trade: a viewer who misses a line of
+ * dialogue has lost the plot, and one who misses a description of the room has not.
+ *
+ * The booking binds admission, as every room does. A voice admitted to finish in
+ * time that then overruns -- a speaker that stalls -- is not withdrawn at the
+ * booking, because the booking belongs to another of our voices and not to the
+ * film: the subtitle waits for the floor, and is reported if it is squeezed out.
  *
  * ## The floor is released by observation, not by prediction
  *
@@ -220,17 +248,32 @@ package dev.baton.director
  * at the top with no special case; one that opens on dialogue gets it at the first
  * pause long enough to hold it.
  *
- * **It outranks every cue, and it ignores the room the cues reserve.** The point
- * of it is that the viewer is told early, so it takes the first window that holds
- * it, ahead of any cue contesting the same free floor. Honouring [CueRooms] would
- * defeat that. A window with a description in it is reserved from that
- * description's start onwards, so what is left for anything else is the sliver
- * before it: on the bundled clip the longest unreserved span anywhere is 2.25 s,
- * short of the sentence plus the guard at even the authored speaking rate. The
- * cost of not honouring it is bounded, and reported. A cue that comes due while
- * the disclosure speaks waits for the floor as it would behind any voice -- this
- * does not preempt scheduled speech, and scheduled speech does not preempt it --
- * and one squeezed out entirely is a drop naming the disclosure as the holder.
+ * **It outranks every description, and ignores the room descriptions reserve.**
+ * The point of it is that the viewer is told early, so it takes the first window
+ * that holds it, ahead of any description contesting the same free floor. Honouring
+ * the rooms descriptions reserve would defeat that. A window with a description in
+ * it is reserved from that description's start onwards, so what is left for
+ * anything else is the sliver before it: on the bundled clip the longest
+ * unreserved span anywhere is 2.25 s, short of the sentence plus the guard at even
+ * the authored speaking rate. The cost of not honouring it is bounded, and
+ * reported. A cue that comes due while the disclosure speaks waits for the floor as
+ * it would behind any voice -- this does not preempt scheduled speech, and
+ * scheduled speech does not preempt it -- and one squeezed out entirely is a drop
+ * naming the disclosure as the holder.
+ *
+ * **It honours a subtitle booking, though.** Being told the voice is synthetic a
+ * sentence later costs the viewer nothing; losing the line a subtitle translates
+ * costs them the scene, which is the loss bookings exist to prevent, and a
+ * disclosure that ignored them would be the one voice left that could still
+ * inflict it. So its boundary is the same `nextBlockingEventMs` a cue's is: it must
+ * finish, plus the guard, before the next booked subtitle as well as before the
+ * dialogue. And it does not take the floor while a subtitle is due and fits, since
+ * that subtitle's booking has already begun -- rule 3's ranking of the disclosure
+ * over a subtitle survives for the free floor ahead of a booking, and not inside
+ * one. This does not cost it the sliver argument above. A description reserves its
+ * room statically, from its start, whether or not it ever speaks; a booking is
+ * released the moment its subtitle has spoken or been dropped, so what is left for
+ * the disclosure after a subtitle is the rest of that silence.
  *
  * What that does not buy is a guarantee that nothing synthetic is heard first. A
  * description in a window too short for the disclosure still speaks there.
@@ -271,7 +314,8 @@ package dev.baton.director
  *   has passed the end of that window, the cue is dropped rather than carried
  *   into some later gap where it would describe the wrong moment.
  * - **And to its room inside that window.** Playback past the start of the next
- *   cue in the same window drops this one too, rather than letting it spill into
+ *   cue in the same window (for a subtitle, the next subtitle) drops this one too,
+ *   rather than letting it spill into
  *   its neighbour's slot if the neighbour happens not to want it. The neighbour
  *   might yet speak -- the floor could free up a tick later -- and a cue that had
  *   already been let into that room would be describing a moment the film has
@@ -618,8 +662,14 @@ class AudioDirector(
     private fun arbitrateScheduled(nowMs: Long, positionMs: Long): List<DroppedCue> {
         var drops: MutableList<DroppedCue>? = null
         var best: Candidate? = null
+        // The next booked subtitle ahead of the position, which bounds the disclosure
+        // as it bounds a cue. Found in the walk already being made, not a second one.
+        var nextBookingMs = Long.MAX_VALUE
 
         for (cue in track.cues) {
+            if (cue.kind == UtteranceKind.Scheduled.SPOKEN_SUBTITLE && cue.startMs > positionMs) {
+                nextBookingMs = minOf(nextBookingMs, cue.startMs)
+            }
             if (cue.id in resolved || positionMs < cue.startMs) continue
             when (val assessment = assess(cue, positionMs)) {
                 is Assessment.Drop -> {
@@ -650,8 +700,11 @@ class AudioDirector(
 
         // Rule 3's first clause. Taken before the cue contest's winner, and outside
         // it: the cues above were all assessed regardless, so one that loses the
-        // floor to the disclosure waits exactly as it would behind any voice.
-        if (active == null) active = disclosureThatFits(nowMs, positionMs)
+        // floor to the disclosure waits exactly as it would behind any voice. Except
+        // to a subtitle that is due and fits, whose booking has already begun.
+        if (active == null && best?.cue?.kind != UtteranceKind.Scheduled.SPOKEN_SUBTITLE) {
+            active = disclosureThatFits(nowMs, positionMs, nextBookingMs)
+        }
 
         val winner = best
         if (active == null && winner != null) {
@@ -678,8 +731,10 @@ class AudioDirector(
     /**
      * The eligibility rule. A cue is bound to the silence window containing its
      * own start time, and to the part of that window that has not been promised to
-     * a description behind it; what is left of *that* at [positionMs] is all the
-     * room it will ever have, and the room only shrinks.
+     * a cue behind it -- a booked subtitle, or for a description any cue; what is
+     * left of *that* at [positionMs] is all the room it will ever have, and the
+     * room only shrinks. A room that ends at a booking is reported as that when the
+     * cue does not fit it.
      *
      * The second clause is the whole of it, and it used to be missing. Reading the
      * room off the window end alone is right exactly while a window holds one cue,
@@ -712,19 +767,29 @@ class AudioDirector(
             cue.variants.indexOfFirst { it.measuredDuration.millis + config.guardMs <= availableMs }
         }
 
-        return if (variantIndex < 0) {
-            Assessment.Drop(
+        if (variantIndex >= 0) return Assessment.Fits(variantIndex, windowEndMs, roomEndMs)
+
+        val booking = track.rooms.bookingThatEndsRoomOf(cue.id)
+        return Assessment.Drop(
+            if (booking != null) {
+                DropReason.RunsIntoBookedSubtitle(
+                    subtitleCueId = booking,
+                    subtitleStartMs = roomEndMs,
+                    shortestVariantMs = cue.variants.last().measuredDuration.millis,
+                    availableMs = availableMs,
+                    guardMs = config.guardMs,
+                    floorHeldBy = active?.kind,
+                )
+            } else {
                 DropReason.NoVariantFits(
                     shortestVariantMs = cue.variants.last().measuredDuration.millis,
                     availableMs = availableMs,
                     guardMs = config.guardMs,
                     floorHeldBy = active?.kind,
                     nextCueStartMs = roomEndMs.takeIf { it < windowEndMs },
-                ),
-            )
-        } else {
-            Assessment.Fits(variantIndex, windowEndMs, roomEndMs)
-        }
+                )
+            },
+        )
     }
 
     /** Rule 3, then earliest, then id -- so the choice never depends on iteration luck. */
@@ -742,15 +807,17 @@ class AudioDirector(
      *
      * The eligibility rule with its cue-specific halves taken out. Bound to the
      * window the playback position is in, not to one it was written for, because it
-     * was not written for a moment. Bound to that window's end, not to a room,
-     * because it neither reserves room nor honours the room cues reserve: see the
-     * class doc. And not a drop when it does not fit -- the debt belongs to the
-     * session, so it waits for a silence that does.
+     * was not written for a moment. Bound to that window's end or [nextBookingMs],
+     * whichever is sooner, and not to a description's room, because it neither
+     * reserves room nor honours the room descriptions reserve, but does honour a
+     * subtitle booking: see the class doc. And not a drop when it does not fit --
+     * the debt belongs to the session, so it waits for a silence that does.
      */
-    private fun disclosureThatFits(nowMs: Long, positionMs: Long): Speaking.ScheduledUtterance? {
+    private fun disclosureThatFits(nowMs: Long, positionMs: Long, nextBookingMs: Long): Speaking.ScheduledUtterance? {
         val variant = disclosure?.takeIf { disclosureOwed } ?: return null
         val windowEndMs = track.silence.windowEndAt(positionMs) ?: return null
-        if (variant.measuredDuration.millis + config.guardMs > windowEndMs - positionMs) return null
+        val roomEndMs = minOf(windowEndMs, nextBookingMs)
+        if (variant.measuredDuration.millis + config.guardMs > roomEndMs - positionMs) return null
         return Speaking.ScheduledUtterance(
             id = DISCLOSURE_ID,
             kind = UtteranceKind.Scheduled.SYNTHETIC_SPEECH_DISCLOSURE,
@@ -762,6 +829,7 @@ class AudioDirector(
             duration = variant.measuredDuration,
             startedAtPositionMs = positionMs,
             windowEndMs = windowEndMs,
+            roomEndMs = roomEndMs,
         )
     }
 

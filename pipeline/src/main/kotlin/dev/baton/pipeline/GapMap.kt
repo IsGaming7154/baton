@@ -1,12 +1,11 @@
 package dev.baton.pipeline
 
-import dev.baton.director.DirectorConfig
 import dev.baton.director.Gap
 
 /**
- * The two thresholds that turn a list of word timings into a map of describable
- * silence. Both are settable so that the map is driven by numbers a reader can
- * argue with rather than by constants buried in a loop.
+ * The threshold that turns a list of word timings into a map of silence. Settable
+ * so that the map is driven by a number a reader can argue with rather than by a
+ * constant buried in a loop.
  */
 data class GapMapConfig(
     /**
@@ -19,40 +18,32 @@ data class GapMapConfig(
      * than a beat between lines.
      */
     val dialogueBridgeMs: Long = DEFAULT_DIALOGUE_BRIDGE_MS,
-
-    /**
-     * The shortest window worth shipping. A cue cannot fit in 200 ms, and a map
-     * full of windows nothing can be placed in costs the runtime memory it does
-     * not have on a 1 GB device.
-     *
-     * Derivation: the shortest description worth writing is about three words; at
-     * the 165 wpm the synthesizer speaks at that is roughly 1.1 s. The runtime
-     * additionally refuses to start a cue unless [DirectorConfig.guardMs] of
-     * clear air remains after it, and the pipeline holds a lead-in at the start
-     * of the window so the duck ramp completes before the voice arrives. 1.5 s
-     * is the smallest window in which all three still leave room to speak.
-     */
-    val minimumUsefulGapMs: Long = DEFAULT_MINIMUM_USEFUL_GAP_MS,
 ) {
     init {
         require(dialogueBridgeMs >= 0) { "dialogueBridgeMs must be >= 0, was $dialogueBridgeMs" }
-        require(minimumUsefulGapMs > 0) { "minimumUsefulGapMs must be > 0, was $minimumUsefulGapMs" }
     }
 
     companion object {
         const val DEFAULT_DIALOGUE_BRIDGE_MS: Long = 300L
-        const val DEFAULT_MINIMUM_USEFUL_GAP_MS: Long = 1_500L
     }
 }
 
 /**
  * Derives the baked gap map from word-level timings.
  *
- * What ships in the track is the *schedulable* silence map, not a raw voice
- * activity trace: windows too short to hold anything have already been discarded,
- * and pauses inside an utterance have already been bridged. That is the map the
- * runtime wants, because the only question it ever asks of it is "how much room
- * is left in the window this cue was written for".
+ * What ships in the track is the *truthful* silence map: every window between
+ * two runs of dialogue, however short. Pauses inside an utterance are bridged,
+ * because they are not silence between lines, but nothing is discarded for being
+ * too short to hold a description.
+ *
+ * It used to be the *schedulable* map, with windows under the minimum useful gap
+ * thrown away, and that gave one field two incompatible meanings (issue #5). The
+ * runtime asks the map two questions: how much room a cue has, and whether the
+ * film is silent at a position. The second wants the truth. A 400 ms beat between
+ * two lines is too short to describe anything in and is still not dialogue, and a
+ * map that omitted it asserted dialogue there; one that merged it away would
+ * assert silence over the lines either side. What is worth scheduling into is
+ * policy, and it now lives with the policy: see [PipelineConfig.minimumUsefulGapMs].
  */
 object GapMapper {
 
@@ -71,7 +62,7 @@ object GapMapper {
         }
         if (cursorMs < mediaDurationMs) silence += Gap(cursorMs, mediaDurationMs)
 
-        return silence.filter { it.durationMs >= config.minimumUsefulGapMs }
+        return silence
     }
 
     /**

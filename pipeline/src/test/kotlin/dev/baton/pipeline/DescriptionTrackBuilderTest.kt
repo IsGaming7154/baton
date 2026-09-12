@@ -40,6 +40,7 @@ class DescriptionTrackBuilderTest : FunSpec({
         track.synthetic shouldBe true
         track.gapMap shouldContainExactly listOf(
             Gap(0, 6_000),
+            Gap(9_500, 10_200),
             Gap(13_000, 16_000),
             Gap(21_000, 23_000),
             Gap(27_000, 31_500),
@@ -98,18 +99,44 @@ class DescriptionTrackBuilderTest : FunSpec({
         track.cues.none { it.id == CueId("ad-21000") } shouldBe true
     }
 
-    test("every gap the builder looked at is accounted for, as a cue or as a drop") {
+    test("every gap is accounted for, as a cue, as a drop, or as too short to write into") {
         // Stated per window rather than by counting, because the counts stopped
         // agreeing once a window could hold more than one cue. What was actually
         // being protected is that no window leaves the builder unexplained: it
-        // either has something to say in it, or it has a reason it does not.
+        // either has something to say in it, or it has a reason it does not. The
+        // third reason is a number rather than a report, and it is exclusive:
+        // a window below the threshold is never described and never dropped.
+        val minimumUsefulGapMs = PipelineConfig().minimumUsefulGapMs
         for (gap in track.gapMap) {
             val described = track.cues.any { it.startMs >= gap.startMs && it.startMs < gap.endMs }
             val explained = result.drops.any { it.gap == gap }
+            val tooShort = gap.durationMs < minimumUsefulGapMs
             withClue("gap ${gap.startMs}-${gap.endMs} is neither described nor explained") {
-                (described || explained) shouldBe true
+                (described || explained || tooShort) shouldBe true
+            }
+            if (tooShort) {
+                withClue("gap ${gap.startMs}-${gap.endMs} is below the threshold and was written into anyway") {
+                    (described || explained) shouldBe false
+                }
             }
         }
+    }
+
+    test("a window too short to write into ships in the map, with no cue and no drop") {
+        val beat = Gap(9_500, 10_200)
+        track.gapMap.contains(beat) shouldBe true
+        track.cues.none { it.startMs >= beat.startMs && it.startMs < beat.endMs } shouldBe true
+        result.drops.none { it.gap == beat } shouldBe true
+        result.fits.none { it.gap == beat } shouldBe true
+    }
+
+    test("the minimum useful gap is a placement number, not a rule baked into the map") {
+        // Lowered, the builder opens the 700 ms window it skipped. The recorded
+        // drafter has nothing for it, so it comes back as a reported drop -- and
+        // the gap map is the same map either way.
+        val permissive = Fixtures.build(PipelineConfig(minimumUsefulGapMs = 500))
+        permissive.track.gapMap shouldBe track.gapMap
+        permissive.drops.single { it.gap == Gap(9_500, 10_200) }.reason shouldBe AuthoringDropReason.NoDraftOffered
     }
 
     test("every emitted variant carries a duration measured off rendered audio") {

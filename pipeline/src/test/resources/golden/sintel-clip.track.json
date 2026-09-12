@@ -9,6 +9,10 @@
             "endMs": 6000
         },
         {
+            "startMs": 9500,
+            "endMs": 10200
+        },
+        {
             "startMs": 13000,
             "endMs": 16000
         },

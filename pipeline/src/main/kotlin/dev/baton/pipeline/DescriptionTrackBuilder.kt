@@ -70,8 +70,11 @@ data class BuildRequest(
  * runtime could not choose between. Every emitted cue starts inside a window that
  * is in the track's own gap map, and is short enough that the runtime's admission
  * rule will let it speak -- including the half of that rule that reserves room for
- * the cue behind it. Every window that produced no cue at all is in
- * [BuildResult.drops] with a reason.
+ * the cue behind it. Every window the builder authored into that produced no cue
+ * at all is in [BuildResult.drops] with a reason; a window shorter than
+ * [PipelineConfig.minimumUsefulGapMs] is not authored into, stays in the gap map
+ * because the silence is real, and is explained by that threshold rather than by
+ * a drop.
  */
 class DescriptionTrackBuilder(
     private val transcription: Transcription,
@@ -89,6 +92,8 @@ class DescriptionTrackBuilder(
         val fits = mutableListOf<FitRecord>()
 
         for (gap in gaps) {
+            // The map keeps every silence; what is worth writing into is decided here.
+            if (gap.durationMs < config.minimumUsefulGapMs) continue
             val scene = sceneAt(gap, transcript, request.media)
             var cursorMs = gap.startMs + config.cueLeadInMs
             var ordinal = 0

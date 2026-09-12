@@ -85,6 +85,13 @@ class AudioDirectorInvariantTest : FunSpec({
             (seen.disclosureRestarted > 57) shouldBe true
             (seen.disclosureWithdrawn > 3) shouldBe true
             (seen.cueStartedWhileDisclosureOwed > 48) shouldBe true
+            // Subtitle bookings contending with descriptions (issue #5): a description
+            // that gave way to a booking, a subtitle whose room a description written
+            // inside it did not shorten, and a disclosure that fitted the silence but
+            // yielded to a booking. Same derivation, over the director that has them.
+            (seen.descriptionsDroppedForBooking > 42) shouldBe true
+            (seen.subtitleKeptRoomPastDescription > 22) shouldBe true
+            (seen.disclosureYieldedToBooking > 23) shouldBe true
         }
     }
 })
@@ -156,6 +163,8 @@ private fun drive(
         coverage.record(
             scenario.track, previous, directive, positionMs, events, previousPlayback, playback, starts,
             disclosureOwed = invariants.disclosureOwed,
+            disclosure = scenario.disclosure,
+            guardMs = config.guardMs,
         )
         previous = directive.speaking
     }
@@ -213,6 +222,9 @@ private class Coverage {
     var disclosureRestarted = 0
     var disclosureWithdrawn = 0
     var cueStartedWhileDisclosureOwed = 0
+    var descriptionsDroppedForBooking = 0
+    var subtitleKeptRoomPastDescription = 0
+    var disclosureYieldedToBooking = 0
 
     fun record(
         track: DescriptionTrack,
@@ -224,6 +236,8 @@ private class Coverage {
         playback: Playback,
         starts: MutableMap<UtteranceId, Long>,
         disclosureOwed: Boolean,
+        disclosure: Variant?,
+        guardMs: Long,
     ) {
         ticks++
         if (!track.silence.isSilentAt(positionMs)) dialogueTicks++
@@ -246,7 +260,26 @@ private class Coverage {
                 } else if (started) {
                     if (disclosing) disclosureRestarted++ else cueReplayedAfterSeek++
                 }
-                if (started && !disclosing && disclosureOwed) cueStartedWhileDisclosureOwed++
+                if (started && !disclosing && disclosureOwed) {
+                    cueStartedWhileDisclosureOwed++
+                    // The disclosure fitted the silence, so only a booking held it back.
+                    val windowEndMs = track.silence.windowEndAt(positionMs)
+                    if (disclosure != null && windowEndMs != null &&
+                        disclosure.measuredDuration.millis + guardMs <= windowEndMs - positionMs
+                    ) {
+                        disclosureYieldedToBooking++
+                    }
+                }
+                // A subtitle granted room past a description written after its start:
+                // the description did not shorten the booking.
+                if (started && speaking.kind == UtteranceKind.Scheduled.SPOKEN_SUBTITLE) {
+                    val ownStartMs = track.cues.single { it.id == speaking.cueId }.startMs
+                    val overDescription = track.cues.any {
+                        it.kind == UtteranceKind.Scheduled.AUDIO_DESCRIPTION &&
+                            it.startMs > ownStartMs && it.startMs < speaking.roomEndMs
+                    }
+                    if (overDescription) subtitleKeptRoomPastDescription++
+                }
                 starts[speaking.id] = speaking.startedAtMs
             }
         }
@@ -254,6 +287,8 @@ private class Coverage {
         directive.drops.forEach {
             when (it.reason) {
                 is DropReason.NoVariantFits -> dropsNoVariantFits++
+                is DropReason.RunsIntoBookedSubtitle ->
+                    if (it.kind == UtteranceKind.Scheduled.AUDIO_DESCRIPTION) descriptionsDroppedForBooking++
                 DropReason.NoSilenceAtCueStart -> dropsNoSilenceAtCueStart++
                 DropReason.NoVariants -> dropsNoVariants++
             }
@@ -289,7 +324,10 @@ private class Coverage {
         "neverMeasured=$withdrawnNeverMeasured withdrawnDuringStall=$withdrawnDuringStall " +
         "stallAnomalies=$stallAnomalies disclosureStarted=$disclosureStarted " +
         "disclosureRestarted=$disclosureRestarted disclosureWithdrawn=$disclosureWithdrawn " +
-        "cueStartedWhileDisclosureOwed=$cueStartedWhileDisclosureOwed)"
+        "cueStartedWhileDisclosureOwed=$cueStartedWhileDisclosureOwed " +
+        "descriptionsDroppedForBooking=$descriptionsDroppedForBooking " +
+        "subtitleKeptRoomPastDescription=$subtitleKeptRoomPastDescription " +
+        "disclosureYieldedToBooking=$disclosureYieldedToBooking)"
 }
 
 /**
@@ -319,6 +357,13 @@ private class Invariants(
     private val spokenSinceSeek = mutableMapOf<CueId, Long>()
     private val droppedSinceSeek = mutableSetOf<CueId>()
 
+    /**
+     * Where the director last rebaselined: the first tick, and every seek. Cues that
+     * start before it were passed over without a report, so they are not still due.
+     */
+    private var baselinePositionMs = 0L
+    private var ticked = false
+
     fun check(
         step: Int,
         nowMs: Long,
@@ -333,6 +378,8 @@ private class Invariants(
             spokenSinceSeek.clear()
             droppedSinceSeek.clear()
         }
+        if (seeked || !ticked) baselinePositionMs = positionMs
+        ticked = true
 
         val clue = "step $step: now=$nowMs position=$positionMs playback=$playback " +
             "events=$events directive=$directive track=$track"
@@ -351,6 +398,7 @@ private class Invariants(
             checkNobodyWasCutOff(directive, playback, events)
             checkSeekLeavesSilence(directive, events)
             checkDisclosure(directive, positionMs, events)
+            checkBookings(directive)
         }
         // After the checks: the tick that withdraws the disclosure names nothing, so
         // it is the following ticks that must not name it again.
@@ -391,6 +439,18 @@ private class Invariants(
             if (reason is DropReason.NoVariantFits) {
                 withClue("a drop reason must report the guard actually applied") {
                     reason.guardMs shouldBe config.guardMs
+                }
+            }
+            if (reason is DropReason.RunsIntoBookedSubtitle) {
+                withClue("a drop reason must report the guard actually applied") {
+                    reason.guardMs shouldBe config.guardMs
+                }
+                val booking = track.cues.singleOrNull { it.id == reason.subtitleCueId }
+                withClue("a booking drop must name a subtitle booked later in the same silence") {
+                    booking?.kind shouldBe UtteranceKind.Scheduled.SPOKEN_SUBTITLE
+                    booking?.startMs shouldBe reason.subtitleStartMs
+                    (reason.subtitleStartMs > drop.cueStartMs) shouldBe true
+                    track.silence.windowEndAt(reason.subtitleStartMs) shouldBe track.silence.windowEndAt(drop.cueStartMs)
                 }
             }
         }
@@ -488,7 +548,9 @@ private class Invariants(
      *
      * "Goes first" is checked where it can be broken: on the tick a cue starts. If
      * the disclosure was still owed then, it must not have fitted the silence at
-     * that position, or the cue took a floor the policy gave to the disclosure.
+     * that position up to the next booked subtitle, or the cue took a floor the
+     * policy gave to the disclosure. The one cue it yields a fitting floor to is a
+     * subtitle that is due, whose booking has already begun (issue #5).
      */
     private fun checkDisclosure(directive: Directive, positionMs: Long, events: List<InputEvent>) {
         if (events.any { it is InputEvent.SpeechEnded && it.id == AudioDirector.DISCLOSURE_ID }) {
@@ -505,11 +567,60 @@ private class Invariants(
         val before = previous?.speaking as? Speaking.Utterance
         val cueStarted = before == null || before.id != speaking.id || before.startedAtMs != speaking.startedAtMs
         val owed = disclosure?.takeIf { disclosureOwed && cueStarted } ?: return
+        if (speaking.kind == UtteranceKind.Scheduled.SPOKEN_SUBTITLE) return
         val windowEndMs = track.silence.windowEndAt(positionMs) ?: return
+        val roomEndMs = minOf(windowEndMs, nextBookingAfter(positionMs))
         withClue("a cue took a silence that the disclosure was owed and fitted") {
-            (owed.measuredDuration.millis + config.guardMs > windowEndMs - positionMs) shouldBe true
+            (owed.measuredDuration.millis + config.guardMs > roomEndMs - positionMs) shouldBe true
         }
     }
+
+    /**
+     * No scheduled utterance ever overlaps a booked subtitle: issue #5's property.
+     *
+     * Checked on the tick an utterance starts, because admission is where the
+     * promise is made, and in two halves. It must finish, plus the guard, before
+     * every subtitle booked ahead of where it starts. And it must not take the floor
+     * while a subtitle it did not start with is already due and has neither spoken
+     * nor been dropped -- that booking has begun, and a voice starting inside it is
+     * the collision issue #5 was opened for, arriving late rather than early.
+     *
+     * Two subtitles booked at the same instant are exempt from the second half.
+     * Both cannot have that moment; the arbitration's tie-break gives it to one, and
+     * the other takes what is left, exactly as a description sharing a beat does.
+     *
+     * What is deliberately not claimed: that an utterance which then overruns its
+     * measured length -- a speaker that stalls -- is cut at the booking. A booking
+     * binds admission, like every room; see the AudioDirector class doc.
+     */
+    private fun checkBookings(directive: Directive) {
+        val speaking = directive.speaking as? Speaking.ScheduledUtterance ?: return
+        val before = previous?.speaking as? Speaking.Utterance
+        if (before != null && before.id == speaking.id && before.startedAtMs == speaking.startedAtMs) return
+
+        val ownStartMs = speaking.cueId?.let { id -> track.cues.single { it.id == id }.startMs }
+        for (booking in track.cues) {
+            if (booking.kind != UtteranceKind.Scheduled.SPOKEN_SUBTITLE || booking.id == speaking.cueId) continue
+            if (booking.startMs > speaking.startedAtPositionMs) {
+                withClue("${speaking.id} was admitted to run into subtitle ${booking.id}, booked at ${booking.startMs}") {
+                    (speaking.endsAtPositionMs + config.guardMs <= booking.startMs) shouldBe true
+                }
+                continue
+            }
+            val stillDue = booking.startMs >= baselinePositionMs &&
+                booking.id !in spokenSinceSeek &&
+                booking.id !in droppedSinceSeek
+            val doubleBooked = speaking.kind == UtteranceKind.Scheduled.SPOKEN_SUBTITLE && booking.startMs == ownStartMs
+            if (doubleBooked) continue
+            withClue("${speaking.id} took the floor from subtitle ${booking.id}, due at ${booking.startMs} and still unspoken") {
+                stillDue shouldBe false
+            }
+        }
+    }
+
+    private fun nextBookingAfter(positionMs: Long): Long = track.cues
+        .filter { it.kind == UtteranceKind.Scheduled.SPOKEN_SUBTITLE && it.startMs > positionMs }
+        .minOfOrNull { it.startMs } ?: Long.MAX_VALUE
 
     private fun checkReactive(speaking: Speaking.ReactiveUtterance) {
         val request = issued[speaking.id]

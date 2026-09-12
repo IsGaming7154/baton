@@ -205,8 +205,12 @@ Friction-log entries 10 and 11 are the record of why this had to be written by h
 A cue may start only when
 
 ```
-now >= cue.startMs  &&  now + variant.measuredDurationMs + guardMs <= endOfItsSilenceWindow
+now >= cue.startMs  &&  now + variant.measuredDurationMs + guardMs <= nextBlockingEventMs
+
+nextBlockingEventMs = min(endOfItsSilenceWindow, nextBookedSubtitleStartMs)
 ```
+
+Spoken subtitles are known in advance, so they are booked against the timeline before descriptions are placed: a description, or the synthetic-speech disclosure, that would still be speaking when a subtitle is due is not started, even where the film is silent, and a description dropped for that is reported as `RunsIntoBookedSubtitle`, naming the subtitle.
 
 The longest variant that satisfies it wins; if none does, the cue is **dropped and the drop is reported with a reason** rather than played late or played over. `guardMs` is 250.
 

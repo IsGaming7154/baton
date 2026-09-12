@@ -202,13 +202,62 @@ class SilenceWindows private constructor(val windows: List<Gap>) {
  * is the behaviour a spoken subtitle and a description sharing a beat have always
  * had. Reserving between them would starve both for a conflict that resolves
  * itself.
+ *
+ * ## A spoken subtitle is a booking
+ *
+ * Subtitle lines are known in advance -- they are read from the subtitle file at
+ * start-up -- so they are on the timeline before any description is placed
+ * (issue #5), and descriptions are placed around them. That comes to two rules,
+ * and only the second is new:
+ *
+ * - **A description's room ends at the next cue of either kind.** So the next
+ *   booked subtitle is always one of its boundaries, which is the eligibility
+ *   rule's `nextBlockingEventMs = min(nextDialogueOnsetMs, nextBookedSubtitleStartMs)`
+ *   with the next description folded in as it always was. This was already true
+ *   before bookings had a name, because every cue ended the room of the cue
+ *   before it, whatever its kind. What was missing was the report: a description
+ *   that gave way to a subtitle read as one that gave way to a neighbour. The
+ *   subtitle that ends a room is now recorded ([bookingThatEndsRoomOf]) so the
+ *   drop can name it.
+ * - **A subtitle's room ends only at the next subtitle, or at the dialogue that
+ *   closes the window.** A description written after a subtitle's start does not
+ *   shorten it. Rooms used to be drawn without regard to kind, so a description
+ *   written half a second into a two-second subtitle cut the subtitle's room to
+ *   half a second and the subtitle was dropped for it -- dialogue traded for
+ *   scenery, the trade rule 3 exists to refuse, arriving by the back door.
+ *
+ * **What a booking reserves is its start and its room**: from `startMs` to the
+ * next booked subtitle, or to the window end when there is none. Against anything
+ * that would still be speaking when it arrives, the start; against anything
+ * written inside it, the room.
+ *
+ * Not its longest variant plus the guard, though that is all a subtitle starting on
+ * time can use. A subtitle does not always start on time: a button press or an
+ * overrunning voice can be holding the floor when it comes due, and a late subtitle
+ * still wants its longest variant. A reservation ending at a fixed point would hand
+ * the rest of the room to a description written there, and the late subtitle would
+ * be squeezed out by it. Not the window end either, where one window holds several
+ * subtitles: each line has to be spoken before the next line's translation is due,
+ * and the next booking starts where it does.
+ *
+ * And held only while the subtitle still needs it. While it is due and unspoken,
+ * nothing else takes the floor inside its room -- no description, because rule 3
+ * ranks the subtitle first, and not the disclosure either (see [AudioDirector]).
+ * Once it has spoken, or been dropped, the rest of the room is open: a description
+ * written there queues behind it and takes what is left, exactly as one sharing its
+ * start always has. Held any longer, the booking would protect no voice at all and
+ * cost the descriptions a silence nobody was using.
  */
-class CueRooms private constructor(private val roomEndByCueId: Map<CueId, Long>) {
+class CueRooms private constructor(
+    private val roomEndByCueId: Map<CueId, Long>,
+    private val bookingByCueId: Map<CueId, CueId>,
+) {
 
     /**
      * The content position past which [cueId]'s room belongs to something else --
-     * the next cue written into the same silence window, or, when it is the last
-     * one there, the dialogue that closes the window.
+     * the next cue written into the same silence window (for a spoken subtitle,
+     * the next spoken subtitle), or, when it is the last one there, the dialogue
+     * that closes the window.
      *
      * Null when the cue does not start inside a window at all. That is the same
      * condition [SilenceWindows.windowEndAt] answers null to, and it stays a
@@ -216,6 +265,17 @@ class CueRooms private constructor(private val roomEndByCueId: Map<CueId, Long>)
      * dialogue is a fault in the track, and the drop it earns says so.
      */
     fun roomEndFor(cueId: CueId): Long? = roomEndByCueId[cueId]
+
+    /**
+     * The booked subtitle whose start is where [cueId]'s room ends, or null when
+     * the room ends at a description or at the dialogue closing the window.
+     *
+     * Where a subtitle and a description share that start, the subtitle is named:
+     * the room would have ended there for the booking alone. Where two subtitles
+     * do, the one with the lower id is, which is the order the arbitration breaks
+     * that tie in.
+     */
+    fun bookingThatEndsRoomOf(cueId: CueId): CueId? = bookingByCueId[cueId]
 
     companion object {
         fun of(cues: List<Cue>, silence: SilenceWindows): CueRooms {
@@ -229,13 +289,24 @@ class CueRooms private constructor(private val roomEndByCueId: Map<CueId, Long>)
             }
 
             val roomEnds = mutableMapOf<CueId, Long>()
+            val bookings = mutableMapOf<CueId, CueId>()
             for ((windowEndMs, inWindow) in byWindowEnd) {
                 val startsMs = inWindow.map { it.startMs }.distinct().sorted()
+                val subtitles = inWindow
+                    .filter { it.kind == UtteranceKind.Scheduled.SPOKEN_SUBTITLE }
+                    .sortedWith(compareBy<Cue>({ it.startMs }, { it.id.value }))
                 for (cue in inWindow) {
-                    roomEnds[cue.id] = startsMs.firstOrNull { it > cue.startMs } ?: windowEndMs
+                    val nextBooking = subtitles.firstOrNull { it.startMs > cue.startMs }
+                    val roomEndMs = if (cue.kind == UtteranceKind.Scheduled.SPOKEN_SUBTITLE) {
+                        nextBooking?.startMs
+                    } else {
+                        startsMs.firstOrNull { it > cue.startMs }
+                    } ?: windowEndMs
+                    roomEnds[cue.id] = roomEndMs
+                    if (nextBooking != null && nextBooking.startMs == roomEndMs) bookings[cue.id] = nextBooking.id
                 }
             }
-            return CueRooms(roomEnds)
+            return CueRooms(roomEnds, bookings)
         }
     }
 }

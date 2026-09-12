@@ -103,15 +103,17 @@ sealed interface Speaking {
         val windowEndMs: Long,
         /**
          * End of the room this utterance was actually granted: the start of the
-         * next cue written into the same silence window, or [windowEndMs] when it
-         * is the last one there.
+         * next cue written into the same silence window -- for a spoken subtitle
+         * the next spoken subtitle, and for the disclosure the next booked subtitle
+         * of any window, see [CueRooms] -- or [windowEndMs] when nothing follows.
          *
          * A second boundary and not a replacement for the first, because the two
          * are owed to different parties and only one of them is a deadline. The
          * window end is the film's: past it an utterance is audible over an
          * actor's line, and that is worth cutting a sentence in half to prevent.
-         * The room end is the *next description's*, and running past it costs a
-         * description that has not started yet -- which by the policy above is a
+         * The room end is the *next cue's*, and running past it costs a voice of
+         * ours that has not started yet, a booked subtitle included -- which by
+         * the policy above is a
          * reported drop rather than a truncation, since scheduled speech does not
          * preempt scheduled speech. So this bounds admission and nothing else:
          * nothing is ever withdrawn for reaching it. See [AudioDirector].
@@ -217,6 +219,34 @@ sealed interface DropReason {
         val guardMs: Long,
         val floorHeldBy: UtteranceKind?,
         val nextCueStartMs: Long? = null,
+    ) : DropReason
+
+    /**
+     * No length variant could finish, plus the guard interval, before a booked
+     * spoken subtitle comes due: the room ran out at [subtitleStartMs], where
+     * [subtitleCueId] is booked, with silence to spare in the window beyond it.
+     *
+     * Split out of [NoVariantFits] because it is a trade issue #5 decided to make,
+     * and it should read as that decision rather than as a gap that was too short.
+     * Subtitles are booked before descriptions are placed, so a description that
+     * would still be speaking when a subtitle is due gives way to it; on dense
+     * foreign-language content this is expected to be the commonest drop there is.
+     * Naming the subtitle is what makes the trade auditable -- the report says which
+     * line of translated dialogue the description gave its room to. A spoken
+     * subtitle can earn it too, from the subtitle booked after it.
+     *
+     * The other fields mean what they mean on [NoVariantFits]. A cue that loses a
+     * contest for the floor to a voice already speaking, a subtitle included, is a
+     * [NoVariantFits] with [NoVariantFits.floorHeldBy] set: that is a contest the
+     * policy ranked, not a collision with a booking.
+     */
+    data class RunsIntoBookedSubtitle(
+        val subtitleCueId: CueId,
+        val subtitleStartMs: Long,
+        val shortestVariantMs: Long,
+        val availableMs: Long,
+        val guardMs: Long,
+        val floorHeldBy: UtteranceKind?,
     ) : DropReason
 
     /**

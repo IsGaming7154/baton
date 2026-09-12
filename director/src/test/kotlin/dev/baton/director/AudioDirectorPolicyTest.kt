@@ -1093,6 +1093,163 @@ class AudioDirectorPolicyTest : FunSpec({
             nextCueStartMs = 2_000,
         )
     }
+
+    // -----------------------------------------------------------------------
+    // Subtitles are bookings, not competitors (issue #5).
+    //
+    // Subtitle lines are known in advance, so they are booked against the
+    // timeline before descriptions are placed. See CueRooms for exactly what a
+    // booking reserves, and the AudioDirector class doc for the disclosure.
+    // -----------------------------------------------------------------------
+
+    test("a description that would run into a booked subtitle is not started, even where dialogue is silent") {
+        val session = Session(
+            trackOf(
+                // Nineteen seconds of silence and no dialogue anywhere near: the only
+                // thing in the description's way is the subtitle booked at 3000.
+                gaps = listOf(Gap(0, 20_000)),
+                cues = listOf(
+                    cue("desc", startMs = 1_000, variants = listOf(variant("Rain sheets off the station roof.", 2_000))),
+                    cue(
+                        "sub",
+                        startMs = 3_000,
+                        kind = UtteranceKind.Scheduled.SPOKEN_SUBTITLE,
+                        variants = listOf(variant("Where have you been?", 1_000)),
+                    ),
+                ),
+            ),
+        )
+
+        val directive = session.playTo(1_000)
+        directive.speaking shouldBe Speaking.Silent
+        directive.drops.single().reason shouldBe DropReason.RunsIntoBookedSubtitle(
+            subtitleCueId = CueId("sub"),
+            subtitleStartMs = 3_000,
+            shortestVariantMs = 2_000,
+            availableMs = 2_000,
+            guardMs = DirectorConfig.DEFAULT_GUARD_MS,
+            floorHeldBy = null,
+        )
+
+        session.playTo(3_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("sub")
+        session.playTo(10_000)
+        session.history.spokenCueIds() shouldBe listOf(CueId("sub"))
+    }
+
+    test("a description written after a subtitle's start does not shorten the booking; it queues behind it") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(0, 20_000)),
+                cues = listOf(
+                    cue(
+                        "sub",
+                        startMs = 1_000,
+                        kind = UtteranceKind.Scheduled.SPOKEN_SUBTITLE,
+                        variants = listOf(variant("I told you not to follow me.", 2_000)),
+                    ),
+                    cue("desc", startMs = 1_500, variants = listOf(variant("She turns away.", 1_000))),
+                ),
+            ),
+        )
+
+        // Rooms used to be drawn without regard to kind, so the description at 1500
+        // cut this subtitle's room to 500 ms and it was dropped for scenery.
+        val subtitle = session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        subtitle.cueId shouldBe CueId("sub")
+        subtitle.roomEndMs shouldBe 20_000
+
+        session.playTo(2_900).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("sub")
+        session.playTo(3_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("desc")
+        session.history.allDrops().shouldBeEmpty()
+    }
+
+    test("a subtitle's room still ends at the next booked subtitle, and the drop names it") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(0, 20_000)),
+                cues = listOf(
+                    cue(
+                        "first",
+                        startMs = 1_000,
+                        kind = UtteranceKind.Scheduled.SPOKEN_SUBTITLE,
+                        variants = listOf(variant("Nobody leaves this valley.", 2_000)),
+                    ),
+                    cue(
+                        "second",
+                        startMs = 2_000,
+                        kind = UtteranceKind.Scheduled.SPOKEN_SUBTITLE,
+                        variants = listOf(variant("Then I stay.", 500)),
+                    ),
+                ),
+            ),
+        )
+
+        session.playTo(3_000)
+        session.history.spokenCueIds() shouldBe listOf(CueId("second"))
+        session.history.allDrops().single().reason shouldBe DropReason.RunsIntoBookedSubtitle(
+            subtitleCueId = CueId("second"),
+            subtitleStartMs = 2_000,
+            shortestVariantMs = 2_000,
+            availableMs = 1_000,
+            guardMs = DirectorConfig.DEFAULT_GUARD_MS,
+            floorHeldBy = null,
+        )
+    }
+
+    test("the disclosure does not start if it would run into a booked subtitle") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(0, 20_000)),
+                cues = listOf(
+                    cue(
+                        "sub",
+                        startMs = 1_500,
+                        kind = UtteranceKind.Scheduled.SPOKEN_SUBTITLE,
+                        variants = listOf(variant("Where have you been?", 1_000)),
+                    ),
+                ),
+            ),
+            disclosure = disclosure(2_000),
+        )
+
+        // The window would hold it from the first tick; the booking at 1500 does not.
+        session.playTo(1_400).speaking shouldBe Speaking.Silent
+
+        session.playTo(1_500).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("sub")
+        val told = session.playTo(2_500).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        told.id shouldBe AudioDirector.DISCLOSURE_ID
+        told.startedAtPositionMs shouldBe 2_500
+        told.roomEndMs shouldBe 20_000
+
+        session.playTo(10_000)
+        session.history.scheduledStarts().map { it.id } shouldBe listOf(UtteranceId("cue:sub"), AudioDirector.DISCLOSURE_ID)
+        session.history.allDrops().shouldBeEmpty()
+    }
+
+    test("a subtitle that is due takes the floor ahead of the disclosure, whose ranking stops at a booking") {
+        val session = Session(
+            trackOf(
+                gaps = listOf(Gap(1_000, 20_000)),
+                cues = listOf(
+                    cue(
+                        "sub",
+                        startMs = 1_000,
+                        kind = UtteranceKind.Scheduled.SPOKEN_SUBTITLE,
+                        variants = listOf(variant("Where have you been?", 1_000)),
+                    ),
+                ),
+            ),
+            disclosure = disclosure(2_000),
+        )
+
+        // Both fit the silence that opens at 1000. The subtitle's booking begins there.
+        session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("sub")
+        session.playTo(2_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().id shouldBe
+            AudioDirector.DISCLOSURE_ID
+
+        session.playTo(10_000)
+        session.history.scheduledStarts().map { it.id } shouldBe listOf(UtteranceId("cue:sub"), AudioDirector.DISCLOSURE_ID)
+    }
 })
 
 /**

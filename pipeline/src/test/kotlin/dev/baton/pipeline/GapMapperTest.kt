@@ -19,6 +19,7 @@ class GapMapperTest : FunSpec({
     test("silence is the complement of the dialogue, closed by the length of the media") {
         GapMapper.derive(transcript, Fixtures.MEDIA_DURATION_MS) shouldBe listOf(
             Gap(0, 6_000),
+            Gap(9_500, 10_200),
             Gap(13_000, 16_000),
             Gap(21_000, 23_000),
             Gap(27_000, 31_500),
@@ -33,15 +34,27 @@ class GapMapperTest : FunSpec({
         GapMapper.dialogueSpans(transcript, Fixtures.MEDIA_DURATION_MS) shouldContain Gap(16_000, 21_000)
     }
 
-    test("a window nothing could be said in is not shipped") {
+    test("a window nothing could be said in is still silence, and the map says so") {
+        // Too short to describe anything in, and not dialogue either. The map is
+        // the truth about the content; whether a window is worth writing into is
+        // decided by the builder, not by leaving the window out.
         val tooShort = Gap(9_500, 10_200)
         tooShort.durationMs shouldBe 700
-        GapMapper.derive(transcript, Fixtures.MEDIA_DURATION_MS) shouldNotContain tooShort
+        GapMapper.derive(transcript, Fixtures.MEDIA_DURATION_MS) shouldContain tooShort
     }
 
-    test("the minimum useful gap is a number, not a rule baked into the loop") {
-        val permissive = GapMapConfig(minimumUsefulGapMs = 500)
-        GapMapper.derive(transcript, Fixtures.MEDIA_DURATION_MS, permissive) shouldContain Gap(9_500, 10_200)
+    test("every silence between two runs of dialogue is a window, however short") {
+        val beats = Transcript(
+            "en-US",
+            listOf(Word("one", 1_000, 2_000), Word("two", 2_400, 3_000), Word("three", 3_310, 4_000)),
+        )
+        // 400 ms and 310 ms: past the 300 ms bridge, so beats between lines, not breath.
+        GapMapper.derive(beats, 5_000) shouldBe listOf(
+            Gap(0, 1_000),
+            Gap(2_000, 2_400),
+            Gap(3_000, 3_310),
+            Gap(4_000, 5_000),
+        )
     }
 
     test("the bridge is a number too, and widening it swallows a real window") {

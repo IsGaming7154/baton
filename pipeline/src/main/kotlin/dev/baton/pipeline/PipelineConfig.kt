@@ -29,6 +29,30 @@ data class PipelineConfig(
      */
     val cueLeadInMs: Long = DEFAULT_CUE_LEAD_IN_MS,
 
+    /**
+     * The shortest silence window worth placing a cue in. Shorter windows stay in
+     * the track's gap map, because the silence is real, and the builder simply
+     * does not author into them.
+     *
+     * A placement rule and not a derivation rule, which is why it is here and not
+     * on [GapMapConfig]. It used to decide which windows shipped at all, and a map
+     * with the short ones removed asserted dialogue in every beat between two lines
+     * -- see [GapMapper].
+     *
+     * Derivation: the shortest description worth writing is about three words; at
+     * the 165 wpm the synthesizer speaks at that is roughly 1.1 s. The runtime
+     * additionally refuses to start a cue unless [DirectorConfig.guardMs] of
+     * clear air remains after it, and the builder holds [cueLeadInMs] at the start
+     * of the window so the duck ramp completes before the voice arrives. 1.5 s
+     * is the smallest window in which all three still leave room to speak.
+     *
+     * Skipping a window below it is not an [AuthoringDrop]. A film has a beat like
+     * that between most pairs of lines, and a report with a line for each would
+     * bury the drops that mean something: a window long enough to describe in
+     * that nevertheless ended up silent.
+     */
+    val minimumUsefulGapMs: Long = DEFAULT_MINIMUM_USEFUL_GAP_MS,
+
     /** How many length options to author per cue, when the drafter can supply them. */
     val variantsPerCue: Int = DEFAULT_VARIANTS_PER_CUE,
 
@@ -91,6 +115,7 @@ data class PipelineConfig(
     init {
         require(guardMs >= 0) { "guardMs must be >= 0, was $guardMs" }
         require(cueLeadInMs >= 0) { "cueLeadInMs must be >= 0, was $cueLeadInMs" }
+        require(minimumUsefulGapMs > 0) { "minimumUsefulGapMs must be > 0, was $minimumUsefulGapMs" }
         require(variantsPerCue >= 1) { "a cue needs at least one variant, asked for $variantsPerCue" }
         require(maxDraftAttempts >= variantsPerCue) {
             "maxDraftAttempts ($maxDraftAttempts) cannot be below variantsPerCue ($variantsPerCue)"
@@ -110,25 +135,26 @@ data class PipelineConfig(
      * another description in it.
      *
      * Derived rather than declared, because the number already exists.
-     * [GapMapConfig.minimumUsefulGapMs] is the shortest window worth shipping, and
+     * [minimumUsefulGapMs] is the shortest window worth placing a cue in, and
      * it was arrived at by adding up a lead-in, the shortest description worth
      * writing -- about three words, roughly 1.1 s at 165 wpm -- and the guard.
      * Subtracting the two overheads back off recovers that description length,
      * which is exactly the quantity being asked about: is there room here to say
      * anything at all? Declaring it separately would let the two numbers drift and
-     * produce a builder that opens slots the gap map would have thrown the window
-     * away for.
+     * produce a builder that opens slots in a leftover it would not have opened a
+     * whole window for.
      *
      * Only ever applied to the leftover. The first slot in a window is opened on
-     * the weaker test that any room survives the overhead, because the gap map has
-     * already certified that window as worth shipping and reversing that decision
-     * here would leave the window in the track with nothing to explain its
+     * the weaker test that any room survives the overhead, because the window has
+     * already passed [minimumUsefulGapMs] and reversing that decision here would
+     * leave a window the builder chose to author into with nothing to explain its
      * silence.
      */
     val minimumCueRoomMs: Long
-        get() = (gapMap.minimumUsefulGapMs - cueLeadInMs - guardMs).coerceAtLeast(1L)
+        get() = (minimumUsefulGapMs - cueLeadInMs - guardMs).coerceAtLeast(1L)
 
     companion object {
+        const val DEFAULT_MINIMUM_USEFUL_GAP_MS: Long = 1_500L
         const val DEFAULT_CUE_LEAD_IN_MS: Long = 150L
         const val DEFAULT_VARIANTS_PER_CUE: Int = 3
         const val DEFAULT_MAX_DRAFT_ATTEMPTS: Int = 6
