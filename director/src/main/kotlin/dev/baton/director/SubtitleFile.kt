@@ -75,7 +75,7 @@ private fun parseCue(block: List<Pair<Int, String>>, out: MutableList<SubtitleLi
     val spoken = decodeEntities(
         block.subList(timingIndex + 1, block.size)
             .joinToString(" ") { it.second }
-            .replace(Regex("""\{[^}]*}"""), "")   // SSA overrides, e.g. {\an8}
+            .replace(Regex("""\{[^}]*\}"""), "")  // SSA overrides, e.g. {\an8}; Android's ICU regex rejects a bare closing }
             .replace(Regex("""<[^>]*>"""), ""),   // markup tags, e.g. <i>, </b>, <c.x>, <v Name>
     ).trim()
     if (spoken.isNotEmpty()) out += SubtitleLine(startMs, endMs, spoken)
