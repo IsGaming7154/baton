@@ -11,9 +11,14 @@ import androidx.media3.ui.PlayerView
 
 /**
  * The one Compose surface that touches ExoPlayer directly. Hosts a Media3
- * [PlayerView] via interop rather than reimplementing transport controls --
- * its built-in controller already answers D-pad play/pause, rewind and
- * fast-forward, which is exactly what this tracer slice needs to prove.
+ * [PlayerView] via interop for the picture and the subtitles only.
+ *
+ * The built-in controller is off, and the view takes no focus. Its buttons are
+ * Views that announce themselves to VoiceView and never to the audio director,
+ * so the transport controls are Compose instead (`TransportBar` in `:app`), where
+ * focus is narrated as a voice the director arbitrates. With the controller off
+ * the view no longer handles media keys either (PlayerView.java:962-964, Media3
+ * 1.4.1); the activity binds Play/Pause itself.
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -26,14 +31,7 @@ fun BatonPlayerSurface(
         factory = { context ->
             PlayerView(context).apply {
                 player = exoPlayer
-                useController = true
-                setShowRewindButton(true)
-                setShowFastForwardButton(true)
-                setShowPreviousButton(false)
-                setShowNextButton(false)
-                isFocusable = true
-                isFocusableInTouchMode = true
-                requestFocus()
+                useController = false
             }
         },
         onRelease = { it.player = null },

@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,9 +16,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.Player
 import androidx.tv.material3.Surface
 import dev.baton.director.AudioDirector
 import dev.baton.director.DirectorConfig
+import dev.baton.director.ReactiveRequest
+import dev.baton.director.SpeechLength
+import dev.baton.director.UtteranceId
+import dev.baton.director.UtteranceKind
+import dev.baton.director.Variant
 import dev.baton.ports.SpeechSynth
 import dev.baton.player.BatonPlayer
 import dev.baton.player.BatonPlayerSurface
@@ -56,6 +63,13 @@ class MainActivity : ComponentActivity() {
     private var overlayEnabled = false
     private var overlayState by mutableStateOf(OverlayState())
 
+    /** The transport bar's phrases, rendered at preparation. Empty until then, and empty if no engine can speak. */
+    private var narration: Map<String, Variant> = emptyMap()
+    private var narrationCount = 0
+
+    /** `playWhenReady`: whether the viewer wants the film moving, which is what the Play/Pause button shows. */
+    private var playing by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         overlayEnabled = intent.getBooleanExtra("overlay", false)
@@ -66,6 +80,11 @@ class MainActivity : ComponentActivity() {
             Uri.parse("android.resource://$packageName/${R.raw.sample_clip}"),
             Uri.parse("android.resource://$packageName/${R.raw.sample_clip_en}"),
         )
+        player.exoPlayer.addListener(object : Player.Listener {
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                playing = playWhenReady
+            }
+        })
 
         setContent {
             Surface(modifier = Modifier.fillMaxSize()) {
@@ -79,6 +98,14 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.align(Alignment.TopStart).padding(32.dp),
                     )
                 }
+                TransportBar(
+                    playing = playing,
+                    onRewind = { player.exoPlayer.seekBack() },
+                    onPlayPause = ::togglePlayback,
+                    onFastForward = { player.exoPlayer.seekForward() },
+                    announce = ::announce,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp),
+                )
             }
         }
 
@@ -109,6 +136,7 @@ class MainActivity : ComponentActivity() {
         runOnUiThread {
             if (isFinishing || isDestroyed) return@runOnUiThread
             synth = prepared?.synth
+            narration = prepared?.narration.orEmpty()
 
             if (prepared != null) {
                 val audioSpeaker = RenderedAudioSpeaker(::log)
@@ -198,6 +226,66 @@ class MainActivity : ComponentActivity() {
             }
             handler.postDelayed(this, 1_000L)
         }
+    }
+
+    /**
+     * Coming back to the app: restart the loop [onStop] stopped, and say where playback
+     * stands. Null on the first start, which is a launch and not a return -- preparation
+     * posts the tracer back to this looper only after `onCreate`, `onStart` and
+     * `onResume` have run.
+     */
+    override fun onStart() {
+        super.onStart()
+        val running = tracer ?: return
+        running.start()
+        announce(TransportNarration.state(player.exoPlayer.playWhenReady))
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (RemoteBindings.togglesPlayback(event.keyCode, event.action, event.repeatCount)) {
+            togglePlayback()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    /**
+     * Read back rather than assumed: audio focus can refuse the play, and the state is
+     * masked synchronously (ExoPlayerImpl.java:2818-2830, Media3 1.4.1), so the director
+     * sees the pause and the "Paused" request on the same tick -- the pause edge clears
+     * the floor first and the request then takes it (AudioDirector.advance).
+     */
+    private fun togglePlayback() {
+        val exo = player.exoPlayer
+        exo.playWhenReady = !exo.playWhenReady
+        announce(TransportNarration.state(exo.playWhenReady))
+    }
+
+    /**
+     * Ask the director for one of the transport bar's pre-rendered phrases.
+     *
+     * A new id every time, never one derived from the phrase: the director releases the
+     * floor on a `SpeechEnded` matched by id alone, so a late report from an earlier
+     * "Play, button" would otherwise silence this one.
+     */
+    private fun announce(phrase: String) {
+        val running = tracer
+        val variant = narration[phrase]
+        if (running == null || variant == null) {
+            val reason = if (running == null) "not-prepared" else "not-rendered"
+            log("reactive unavailable kind=${UtteranceKind.Reactive.UI_NARRATION} phrase=\"$phrase\" reason=$reason")
+            return
+        }
+        narrationCount += 1
+        running.request(
+            ReactiveRequest(
+                id = UtteranceId("ui-$narrationCount"),
+                kind = UtteranceKind.Reactive.UI_NARRATION,
+                text = phrase,
+                length = SpeechLength.Measured(variant.measuredDuration),
+                audioRef = variant.audioRef,
+            ),
+        )
     }
 
     override fun onStop() {
