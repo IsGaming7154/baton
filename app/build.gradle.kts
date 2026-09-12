@@ -47,6 +47,14 @@ android {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
 
+    // Robolectric composition-tree tests (ShellNarrationTest) need the merged
+    // resources and manifest.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -86,10 +94,23 @@ dependencies {
     }
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+    // Declares the empty ComponentActivity that createComposeRule() launches.
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
     testImplementation("io.kotest:kotest-runner-junit5:5.9.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("org.robolectric:robolectric:4.13")
+    // The JUnit 4 Robolectric tests run on the same JUnit Platform as kotest;
+    // 5.8.2 matches the platform 1.8.2 kotest 5.9.1 requires.
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.8.2")
 }
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    // ShellNarrationTest launches the ComponentActivity that ui-test-manifest
+    // declares, and ui-test-manifest is debug-only, so the release unit-test
+    // variant has no activity to launch. It runs under testDebugUnitTest.
+    if (name == "testReleaseUnitTest") {
+        filter { excludeTestsMatching("dev.baton.tv.ShellNarrationTest") }
+    }
 }
