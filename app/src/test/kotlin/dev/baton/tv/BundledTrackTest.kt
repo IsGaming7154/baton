@@ -42,7 +42,7 @@ class BundledTrackTest : FunSpec({
         // excerpt. Dropping in a track built for different footage is the mistake
         // this catches, and it is otherwise invisible: the wrong track parses,
         // schedules, and speaks, just over the wrong dialogue.
-        track.sourceId shouldBe "sintel-01m41s"
+        track.sourceId shouldBe "sintel-01m41s-de-dub"
 
         // A floor, not the number that happens to be in the file. Counting what
         // is there would pass whatever ships. What has to be true is that there

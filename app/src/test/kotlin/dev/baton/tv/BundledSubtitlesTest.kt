@@ -38,12 +38,12 @@ class BundledSubtitlesTest : FunSpec({
         }
     }
 
-    test("eight of the twelve lines land inside a silence window") {
+    test("ten of the twelve lines land inside a silence window") {
         // This count characterises this fixture for the demo; it is not a
         // floor. A change to the clip, the subtitles or the gap map is
         // expected to move it.
         val inSilence = lines.indices.count { track.silence.windowEndAt(starts[it]) != null }
-        inSilence shouldBe 8
+        inSilence shouldBe 10
     }
 })
 

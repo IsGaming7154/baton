@@ -1,46 +1,30 @@
 {
   "formatVersion": 1,
-  "sourceId": "sintel-01m41s",
+  "sourceId": "sintel-01m41s-de-dub",
   "locale": "en-US",
   "synthetic": true,
   "gapMap": [
-    { "startMs": 0, "endMs": 5600 },
-    { "startMs": 9400, "endMs": 10200 },
-    { "startMs": 14700, "endMs": 16400 },
-    { "startMs": 25200, "endMs": 26000 },
-    { "startMs": 32700, "endMs": 33600 },
-    { "startMs": 41100, "endMs": 41900 },
-    { "startMs": 43900, "endMs": 47500 },
-    { "startMs": 50700, "endMs": 51600 },
-    { "startMs": 54800, "endMs": 80100 },
-    { "startMs": 80700, "endMs": 88584 }
+    { "startMs": 0, "endMs": 3942 },
+    { "startMs": 6642, "endMs": 9842 },
+    { "startMs": 12604, "endMs": 15842 },
+    { "startMs": 21204, "endMs": 24442 },
+    { "startMs": 25367, "endMs": 26792 },
+    { "startMs": 27617, "endMs": 28592 },
+    { "startMs": 31092, "endMs": 35642 },
+    { "startMs": 39997, "endMs": 43192 },
+    { "startMs": 44304, "endMs": 47542 },
+    { "startMs": 49867, "endMs": 53542 },
+    { "startMs": 56654, "endMs": 88584 }
   ],
   "cues": [
     {
-      "id": "d1",
-      "startMs": 300,
-      "kind": "AUDIO_DESCRIPTION",
-      "variants": [
-        {
-          "text": "Firelight fades up on a round hearth.",
-          "measuredDurationMs": 2695,
-          "audioRef": null
-        },
-        {
-          "text": "A firelit hearth.",
-          "measuredDurationMs": 1241,
-          "audioRef": null
-        }
-      ]
-    },
-    {
       "id": "d2",
-      "startMs": 44200,
+      "startMs": 44950,
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "The firelight fades to black.",
-          "measuredDurationMs": 1968,
+          "text": "Sparks glow.",
+          "measuredDurationMs": 877,
           "audioRef": null
         },
         {
@@ -52,17 +36,17 @@
     },
     {
       "id": "d3",
-      "startMs": 55100,
+      "startMs": 64950,
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "A young woman picks her way down a rubble-strewn alley.",
-          "measuredDurationMs": 3786,
+          "text": "Sunlit timber-framed houses behind her.",
+          "measuredDurationMs": 1968,
           "audioRef": null
         },
         {
-          "text": "She walks down a narrow alley.",
-          "measuredDurationMs": 2332,
+          "text": "Sunlit timber-framed houses.",
+          "measuredDurationMs": 1241,
           "audioRef": null
         }
       ]
