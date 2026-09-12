@@ -3,6 +3,7 @@ package dev.baton.tv
 import dev.baton.director.DescriptionTrack
 import dev.baton.director.DescriptionTrackJson
 import dev.baton.director.DirectorConfig
+import dev.baton.director.UtteranceKind
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
@@ -50,17 +51,43 @@ class BundledTrackTest : FunSpec({
         // and choosing a variant are decisions and not foregone conclusions.
         (track.cues.size >= 5) shouldBe true
 
-        // The map is the film's schedulable silence, not the list of slots the
+        // The map is the film's truthful silence, not the list of slots the
         // cues occupy. Windows with nothing scheduled in them are the evidence
         // that it was derived from the dialogue rather than fitted to the script
         // -- and they are what the runtime falls back on when a cue is late.
         val occupied = track.cues.mapNotNull { track.silence.windowEndAt(it.startMs) }.toSet()
         (track.gapMap.any { it.endMs !in occupied }) shouldBe true
 
-        // Restates GapMapConfig.minimumUsefulGapMs; :app does not depend on
-        // :pipeline, so the number cannot be imported. A window below it is one
-        // the pipeline would have discarded and nothing can be placed in.
-        track.gapMap.forEach { withClue(it) { (it.durationMs >= 1_500) shouldBe true } }
+        // Restates PipelineConfig.minimumUsefulGapMs; :app does not depend on
+        // :pipeline, so the number cannot be imported. It is a placement rule,
+        // not a derivation one: the map records every real silence, however
+        // short, and this is the shortest window a description may be placed
+        // in, not the shortest one the map is allowed to contain.
+        val minimumUsefulGapMs = 1_500L
+
+        // Every description cue sits in a window at least that long, ...
+        track.cues
+            .filter { it.kind == UtteranceKind.Scheduled.AUDIO_DESCRIPTION }
+            .forEach { cue ->
+                val window = track.gapMap.firstOrNull { it.startMs <= cue.startMs && cue.startMs < it.endMs }
+                withClue("${cue.id} placed in $window") {
+                    ((window?.durationMs ?: 0L) >= minimumUsefulGapMs) shouldBe true
+                }
+            }
+
+        // ... and the map may hold shorter windows -- the beats between two
+        // lines, kept now that the map is truthful -- but no description cue
+        // is placed in one.
+        track.gapMap
+            .filter { it.durationMs < minimumUsefulGapMs }
+            .forEach { window ->
+                withClue(window) {
+                    track.cues.none { cue ->
+                        cue.kind == UtteranceKind.Scheduled.AUDIO_DESCRIPTION &&
+                            cue.startMs >= window.startMs && cue.startMs < window.endMs
+                    } shouldBe true
+                }
+            }
 
         // SilenceWindows sorts the map and merges anything overlapping or
         // touching. If it had work to do, the hand-authored list was malformed --

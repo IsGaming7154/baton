@@ -5,8 +5,13 @@
   "synthetic": true,
   "gapMap": [
     { "startMs": 0, "endMs": 5600 },
+    { "startMs": 9400, "endMs": 10200 },
     { "startMs": 14700, "endMs": 16400 },
+    { "startMs": 25200, "endMs": 26000 },
+    { "startMs": 32700, "endMs": 33600 },
+    { "startMs": 41100, "endMs": 41900 },
     { "startMs": 43900, "endMs": 47500 },
+    { "startMs": 50700, "endMs": 51600 },
     { "startMs": 54800, "endMs": 80100 },
     { "startMs": 80700, "endMs": 88584 }
   ],
