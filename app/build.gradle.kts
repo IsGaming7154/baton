@@ -60,6 +60,12 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    // Media3 opens the subtitle sidecar with openRawResourceFd, which fails on a
+    // compressed APK entry; aapt deflates .srt by default, so playback never started.
+    androidResources {
+        noCompress += "srt"
+    }
 }
 
 // androidx.tv:tv-material 1.0.0 pulls in a much newer transitive graph when
