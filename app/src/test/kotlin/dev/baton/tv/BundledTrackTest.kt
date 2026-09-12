@@ -36,12 +36,12 @@ class BundledTrackTest : FunSpec({
         track.locale shouldBe "en-US"
         track.synthetic shouldBe true
 
-        // The track is for one specific 89.4 s excerpt -- Tears of Steel from
-        // 05:24.000 -- and every timestamp in it is only meaningful against that
+        // The track is for one specific 88.6 s excerpt -- Sintel from
+        // 01:41.208 -- and every timestamp in it is only meaningful against that
         // excerpt. Dropping in a track built for different footage is the mistake
         // this catches, and it is otherwise invisible: the wrong track parses,
         // schedules, and speaks, just over the wrong dialogue.
-        track.sourceId shouldBe "tears-of-steel-05m24s"
+        track.sourceId shouldBe "sintel-01m41s"
 
         // A floor, not the number that happens to be in the file. Counting what
         // is there would pass whatever ships. What has to be true is that there

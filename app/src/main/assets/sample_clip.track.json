@@ -1,48 +1,45 @@
 {
   "formatVersion": 1,
-  "sourceId": "tears-of-steel-05m24s",
+  "sourceId": "sintel-01m41s",
   "locale": "en-US",
   "synthetic": true,
   "gapMap": [
-    { "startMs": 4200, "endMs": 10050 },
-    { "startMs": 12400, "endMs": 14075 },
-    { "startMs": 26200, "endMs": 31800 },
-    { "startMs": 44700, "endMs": 47300 },
-    { "startMs": 69550, "endMs": 71800 },
-    { "startMs": 73200, "endMs": 77950 },
-    { "startMs": 79775, "endMs": 82800 },
-    { "startMs": 87200, "endMs": 89416 }
+    { "startMs": 0, "endMs": 5600 },
+    { "startMs": 14700, "endMs": 16400 },
+    { "startMs": 43900, "endMs": 47500 },
+    { "startMs": 54800, "endMs": 80100 },
+    { "startMs": 80700, "endMs": 88584 }
   ],
   "cues": [
     {
       "id": "d1",
-      "startMs": 5900,
+      "startMs": 300,
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "A machine crosses the rooftops.",
-          "measuredDurationMs": 1968,
+          "text": "Firelight slowly reveals a round hut's interior.",
+          "measuredDurationMs": 2695,
           "audioRef": null
         },
         {
-          "text": "A machine.",
-          "measuredDurationMs": 877,
+          "text": "A firelit hut interior.",
+          "measuredDurationMs": 1605,
           "audioRef": null
         }
       ]
     },
     {
       "id": "d2",
-      "startMs": 27000,
-      "kind": "SPOKEN_SUBTITLE",
+      "startMs": 44200,
+      "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "Celia, I love your robot hand.",
-          "measuredDurationMs": 2332,
+          "text": "Her eyes widen in firelight.",
+          "measuredDurationMs": 1968,
           "audioRef": null
         },
         {
-          "text": "Your robot hand.",
+          "text": "Her eyes widen.",
           "measuredDurationMs": 1241,
           "audioRef": null
         }
@@ -50,68 +47,85 @@
     },
     {
       "id": "d3",
-      "startMs": 44850,
+      "startMs": 55100,
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "Lips meet metal.",
-          "measuredDurationMs": 1241,
+          "text": "The woman walks down a narrow alley between tall buildings.",
+          "measuredDurationMs": 3786,
           "audioRef": null
         },
         {
-          "text": "A kiss.",
-          "measuredDurationMs": 877,
+          "text": "She walks down a narrow alley.",
+          "measuredDurationMs": 2332,
           "audioRef": null
         }
       ]
     },
     {
       "id": "d4",
-      "startMs": 73350,
+      "startMs": 62000,
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "Thom's eyes stay shut.",
-          "measuredDurationMs": 1605,
+          "text": "A hooded figure in dark robes blocks her way.",
+          "measuredDurationMs": 3423,
           "audioRef": null
         },
         {
-          "text": "Eyes shut.",
-          "measuredDurationMs": 877,
+          "text": "A hooded figure blocks her way.",
+          "measuredDurationMs": 2332,
           "audioRef": null
         }
       ]
     },
     {
       "id": "d5",
-      "startMs": 79925,
+      "startMs": 68500,
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "Magenta words linger.",
-          "measuredDurationMs": 1241,
+          "text": "The figure offers her a round red fruit.",
+          "measuredDurationMs": 3059,
           "audioRef": null
         },
         {
-          "text": "Words linger.",
-          "measuredDurationMs": 877,
+          "text": "The figure offers fruit.",
+          "measuredDurationMs": 1605,
           "audioRef": null
         }
       ]
     },
     {
       "id": "d6",
-      "startMs": 87350,
+      "startMs": 74400,
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "Celia watches.",
-          "measuredDurationMs": 877,
+          "text": "She runs off and climbs a ruined building.",
+          "measuredDurationMs": 3059,
           "audioRef": null
         },
         {
-          "text": "Celia.",
-          "measuredDurationMs": 514,
+          "text": "She runs and climbs.",
+          "measuredDurationMs": 1605,
+          "audioRef": null
+        }
+      ]
+    },
+    {
+      "id": "d7",
+      "startMs": 81000,
+      "kind": "AUDIO_DESCRIPTION",
+      "variants": [
+        {
+          "text": "A small dragon lies on the roof tiles, one wing bloodied.",
+          "measuredDurationMs": 4150,
+          "audioRef": null
+        },
+        {
+          "text": "A small dragon, wing bloodied.",
+          "measuredDurationMs": 1968,
           "audioRef": null
         }
       ]

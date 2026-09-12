@@ -112,7 +112,7 @@ adb logcat -s Baton:V
 These are the line shapes it emits, not a transcript of a particular run: which engines are installed and which was chosen and why, the frame count and measured duration of every rendered variant, every duck decision beside the loudness it was computed from, and every cue starting, ending and being dropped.
 
 ```
-track loaded asset=… source=tears-of-steel-05m24s cues=6 gaps=8 synthetic=true
+track loaded asset=… source=sintel-01m41s cues=7 gaps=5 synthetic=true
 variant measured cue=d1 variant=0 engine=… frames=… measuredMs=… authoredMs=1968
 duck target=…dB programmeLufs=…
 cue start id=cue:d1 kind=AUDIO_DESCRIPTION cue=d1 variant=0 atPositionMs=… measuredMs=… endsAtMs=…
@@ -234,7 +234,7 @@ dip = narrationLkfs − targetLoudnessDifferenceLu − programmeLufs
 
 clamped so it never boosts and never digs past −19 dB, and held through a 1 dB deadband so a wobbling meter does not restart the fade thirteen times a second.
 
-This is only possible because the app measures the programme itself. On the bundled demo clip, `ffmpeg`'s `ebur128` reports −24.0 LUFS integrated with a loudness range of 13.9 LU — LRA low −33.5, high −19.5. Put those two ends through the rule and it asks for roughly −6 dB at the quiet end and the −19 dB clamp at the loud end. That is arithmetic from a measured programme loudness, not a hardware observation; what it establishes is that on this material the duck has something to adapt to.
+This is only possible because the app measures the programme itself. On the bundled demo clip, `ffmpeg`'s `ebur128` reports −29.9 LUFS integrated with a loudness range of 16.5 LU — LRA low −44.0, high −27.5. Put those two ends through the rule and it asks for no dip at all at the quiet end — at −44.0 LUFS the rule has already reached zero — and about −12 dB at the loud end. That is arithmetic from a measured programme loudness, not a hardware observation; what it establishes is that on this material the duck has something to adapt to.
 
 The same body of research publishes a three-band table — −19 / −9 / −3 dB, and no ducking below −48 LUFS. At the default 12.5 LU the rule lands on those three values at −20.5, −30.5 and −36.5 LUFS, and reaches zero dip on its own at −39.5 LUFS without needing the near-silent threshold as a separate constant. The source comment is careful to call that a **range check and not a reproduction**, because the study does not publish where its band boundaries fall.
 
@@ -252,7 +252,7 @@ The only voice this hardware will provision is IVONA `kajal`, whose usable energ
 
 The presence lift is at 1.6 kHz and the exciter is nearly off, and both look wrong to anyone who has reached for a presence control. They come from ANSI S3.5-1997's Band Importance Functions, which measure the share of intelligibility each band carries: it peaks at **1600 Hz (10.2%)**, is **6.7% at 4 kHz**, and **0.84% at 8 kHz**. The band an engineer reaches for to make a voice sound clear is not the band that carries whether the words are understood.
 
-`SpeechClarity`'s own source comment records the wrong turn that led there: an earlier version put +6 dB at 3.8 kHz with a much larger exciter and won a listening comparison — auditioned dry, in silence, a condition this voice never occurs in. Scored with ESTOI against the real Tears of Steel bed at the signal-to-noise ratios the product actually sees, that old tuning does beat doing nothing at fixed SNR — +0.054 to +0.067 ESTOI over unprocessed at +6/0/−6 dB — but under the director's own duck, where the bed is already pulled down to protect the voice, its edge collapses to +0.005 and is positive in only 23 of 36 utterance/cue pairs: not a result. The shipped chain holds up better ducked — +0.069 to +0.082 over unprocessed at fixed SNR, +0.015 and 27 of 36 pairs once ducked — and moving the lift alone from 3.8 kHz to 1600 Hz, everything else unchanged, is worth a further +0.006 to +0.008 at fixed SNR and +0.005 under the duck. Speech that will always be heard against something else has to be tuned against something else.
+`SpeechClarity`'s own source comment records the wrong turn that led there: an earlier version put +6 dB at 3.8 kHz with a much larger exciter and won a listening comparison — auditioned dry, in silence, a condition this voice never occurs in. Scored with ESTOI against the earlier Tears of Steel demo bed at the signal-to-noise ratios the product actually sees, that old tuning does beat doing nothing at fixed SNR — +0.054 to +0.067 ESTOI over unprocessed at +6/0/−6 dB — but under the director's own duck, where the bed is already pulled down to protect the voice, its edge collapses to +0.005 and is positive in only 23 of 36 utterance/cue pairs: not a result. The shipped chain holds up better ducked — +0.069 to +0.082 over unprocessed at fixed SNR, +0.015 and 27 of 36 pairs once ducked — and moving the lift alone from 3.8 kHz to 1600 Hz, everything else unchanged, is worth a further +0.006 to +0.008 at fixed SNR and +0.005 under the duck. Speech that will always be heard against something else has to be tuned against something else.
 
 One cross-module hazard worth naming, since nothing else would catch it: `SpeechClarity.Settings.targetLkfs` and `DirectorConfig.DEFAULT_NARRATION_LKFS` are the same number in two modules, and if they drift every duck in the product is wrong by the difference while nothing fails. A test pins them together.
 
@@ -274,8 +274,8 @@ The feature request writes itself, because Amazon has already built it. `@amazon
 |---|---|
 | 281 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
 | APK 32,457,961 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
-| Demo clip: 89.4 s, 854×356 H.264, AAC 48 kHz stereo | `ffprobe` |
-| Demo clip: −24.0 LUFS integrated, LRA 13.9 LU | `ffmpeg -af ebur128` |
+| Demo clip: 88.6 s, 854×356 H.264, AAC 48 kHz stereo | `ffprobe` |
+| Demo clip: −29.9 LUFS integrated, LRA 16.5 LU | `ffmpeg -af ebur128` |
 | −23.0 / −33.0 LUFS on EBU Tech 3341 signals | `:loudness` tests, run here |
 | 154 ms decision-to-audible for the output-stage duck | Measured on a Fire TV Stick (AFTSSS, Fire OS 7.7.1.5, Android 9 / API 28) |
 | `underrunCount=0` on both the old `MODE_STREAM` build and `MODE_STATIC` — so it is not evidence for the switch: a static track always reports 0 (`StaticAudioTrackClientProxy::getUnderrunCount`, AOSP `AudioTrackShared.h`) | Same device; Android 9 audio framework source |
@@ -308,11 +308,11 @@ Open, and not hidden:
 
 Baton's own code is MIT-licensed — see [`LICENSE`](LICENSE). Third-party assets below keep their own licences.
 
-The bundled demo clip is an 89.4-second excerpt, from 05:24, of **Tears of Steel**.
+The bundled demo clip is an 88.6-second excerpt of **Sintel**, from 01:41.208 to 03:09.792, re-encoded to 854x356 with the original audio unmodified.
 
-> Tears of Steel — (CC) Blender Foundation | mango.blender.org — Creative Commons Attribution 3.0
+> Sintel — © copyright Blender Foundation | durian.blender.org — Creative Commons Attribution 3.0
 
-Used here under CC-BY 3.0, which permits excerpting and derivative works with attribution. The Blender Foundation additionally asks that the actors' likenesses not be used for commercial purposes; this is a hackathon demonstration and no commercial use is made of them.
+Used here under [CC-BY 3.0](https://creativecommons.org/licenses/by/3.0/), which permits excerpting and derivative works with attribution; source links and excerpt details are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 The description cues in `app/src/main/assets/sample_clip.track.json` are original to this project. They are machine-spoken, and the track marks itself `"synthetic": true` — the field is part of the track format, set by the pipeline and read back by the loader, because the American Council of the Blind's guidance on synthetic description is that the audience should be told. The director acts on that field: a synthetic track owes one spoken disclosure per playback session, rendered and measured on the device's engine like every cue, and admitted into the first silence long enough to hold it (see `AudioDirector`). The sentence itself is this project's wording; the guidance is cited for the requirement, not for the words.
 
