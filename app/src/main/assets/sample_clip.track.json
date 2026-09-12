@@ -17,13 +17,13 @@
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "Firelight slowly reveals a round hut's interior.",
+          "text": "Firelight fades up on a round hearth.",
           "measuredDurationMs": 2695,
           "audioRef": null
         },
         {
-          "text": "A firelit hut interior.",
-          "measuredDurationMs": 1605,
+          "text": "A firelit hearth.",
+          "measuredDurationMs": 1241,
           "audioRef": null
         }
       ]
@@ -34,13 +34,13 @@
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "Her eyes widen in firelight.",
+          "text": "The firelight fades to black.",
           "measuredDurationMs": 1968,
           "audioRef": null
         },
         {
-          "text": "Her eyes widen.",
-          "measuredDurationMs": 1241,
+          "text": "Darkness.",
+          "measuredDurationMs": 514,
           "audioRef": null
         }
       ]
@@ -51,7 +51,7 @@
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "The woman walks down a narrow alley between tall buildings.",
+          "text": "A young woman picks her way down a rubble-strewn alley.",
           "measuredDurationMs": 3786,
           "audioRef": null
         },
@@ -68,13 +68,13 @@
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "A hooded figure in dark robes blocks her way.",
-          "measuredDurationMs": 3423,
+          "text": "She lifts a heavy dark covering aside.",
+          "measuredDurationMs": 2695,
           "audioRef": null
         },
         {
-          "text": "A hooded figure blocks her way.",
-          "measuredDurationMs": 2332,
+          "text": "She lifts a covering.",
+          "measuredDurationMs": 1605,
           "audioRef": null
         }
       ]
@@ -85,13 +85,13 @@
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "The figure offers her a round red fruit.",
-          "measuredDurationMs": 3059,
+          "text": "She inspects a red fruit, then a spiky husk.",
+          "measuredDurationMs": 3423,
           "audioRef": null
         },
         {
-          "text": "The figure offers fruit.",
-          "measuredDurationMs": 1605,
+          "text": "She inspects a red fruit.",
+          "measuredDurationMs": 1968,
           "audioRef": null
         }
       ]
@@ -102,8 +102,8 @@
       "kind": "AUDIO_DESCRIPTION",
       "variants": [
         {
-          "text": "She runs off and climbs a ruined building.",
-          "measuredDurationMs": 3059,
+          "text": "She runs and climbs wooden scaffolding to a roof.",
+          "measuredDurationMs": 3423,
           "audioRef": null
         },
         {
