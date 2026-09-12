@@ -2,9 +2,13 @@ package dev.baton.tv
 
 import android.content.Context
 import dev.baton.director.Cue
+import dev.baton.director.CueId
 import dev.baton.director.DescriptionTrack
 import dev.baton.director.DescriptionTrackJson
+import dev.baton.director.SubtitleLine
+import dev.baton.director.UtteranceKind.Scheduled
 import dev.baton.director.Variant
+import dev.baton.director.parseSubtitles
 import dev.baton.ports.SpeechSynth
 import dev.baton.speech.TtsSpeechSynth
 import java.io.File
@@ -38,6 +42,23 @@ class PreparedTrack(val track: DescriptionTrack, val synth: SpeechSynth?, val di
  * is derived from those frames. The bundled number is logged beside the measured
  * one and then discarded. The file that was measured is the file that is played.
  *
+ * ## Spoken subtitles
+ *
+ * The clip's English SubRip sidecar is parsed alongside the asset (see
+ * `SubtitleFile.kt`), each line is booked into a silence by [SubtitlePlacement],
+ * and each booked line is rendered and measured through the very same path as a
+ * description variant -- same engine, same file-naming, same frames-to-duration
+ * derivation -- because the director admits a subtitle on its length exactly as
+ * it admits a description, and a length measured anywhere else is not evidence
+ * there either.
+ *
+ * ## Toggles
+ *
+ * Both kinds can be turned off at launch, independently, and off means absent:
+ * a disabled kind is filtered out before a line of it is rendered or measured,
+ * so the arbitration never sees it and a window the disabled kind would have
+ * booked stays open. This is a real toggle, not a mute.
+ *
  * If no engine can speak, the cues are withheld rather than scheduled on a
  * duration nothing will honour, and the reason is logged.
  */
@@ -45,13 +66,33 @@ object TrackPreparation {
 
     private const val ASSET = "sample_clip.track.json"
 
-    fun prepare(context: Context, log: (String) -> Unit): PreparedTrack {
+    /**
+     * The pure half of the descriptions toggle: what is left of a cue list once
+     * [enabled] has been applied. Outside `prepare` so it can be tested without
+     * a context, and applied there before anything is rendered, so that off
+     * also means unrendered.
+     */
+    fun descriptionsWhenEnabled(cues: List<Cue>, enabled: Boolean): List<Cue> =
+        if (enabled) cues else cues.filter { it.kind != Scheduled.AUDIO_DESCRIPTION }
+
+    fun prepare(
+        context: Context,
+        descriptions: Boolean,
+        spokenSubtitles: Boolean,
+        log: (String) -> Unit,
+    ): PreparedTrack {
+        log("toggles descriptions=$descriptions spokenSubtitles=$spokenSubtitles")
+
         val authored = context.assets.open(ASSET).use { it.readBytes().toString(Charsets.UTF_8) }
             .let(DescriptionTrackJson::decode)
         log(
             "track loaded asset=$ASSET source=${authored.sourceId} locale=${authored.locale} " +
                 "cues=${authored.cues.size} gaps=${authored.gapMap.size} synthetic=${authored.synthetic}",
         )
+
+        val subtitleLines = context.resources.openRawResource(R.raw.sample_clip_en)
+            .use { it.readBytes().toString(Charsets.UTF_8) }
+            .let(::parseSubtitles)
 
         val synth = TtsSpeechSynth.select(
             context = context,
@@ -62,20 +103,79 @@ object TrackPreparation {
         if (synth == null) {
             log(
                 "ERROR no text-to-speech engine reported a usable voice; " +
-                    "withholding ${authored.cues.size} cues rather than scheduling audio that does not exist",
+                    "withholding ${authored.cues.size} cues and ${subtitleLines.size} subtitle lines " +
+                    "rather than scheduling audio that does not exist",
             )
             return PreparedTrack(authored.copy(cues = emptyList()), null, null)
         }
 
         val startedAtMs = System.currentTimeMillis()
-        val measured = authored.copy(cues = authored.cues.map { measure(it, synth, log) })
+        val descriptionCues = descriptionsWhenEnabled(authored.cues, descriptions).map { measure(it, synth, log) }
+        val subtitleCues = if (spokenSubtitles) {
+            buildSubtitleCues(subtitleLines, authored, synth, log)
+        } else {
+            emptyList()
+        }
         val disclosure = measureDisclosure(synth, log)
-        log("track prepared engine=${synth.engineId} inMs=${System.currentTimeMillis() - startedAtMs}")
 
-        check(measured.cues.all { cue -> cue.variants.all { it.audioRef != null } }) {
+        // Concatenated, not sorted: the director's validation asks only that ids
+        // be unique, and both its linear cue walk and the rooms it derives treat
+        // the list as a set of starts rather than a sequence.
+        val cues = descriptionCues + subtitleCues
+        log(
+            "track prepared engine=${synth.engineId} inMs=${System.currentTimeMillis() - startedAtMs} " +
+                "descriptions=${descriptionCues.size} spokenSubtitles=${subtitleCues.size}",
+        )
+
+        check(cues.all { cue -> cue.variants.all { it.audioRef != null } }) {
             "a scheduled variant reached the director without pre-rendered audio"
         }
-        return PreparedTrack(measured, synth, disclosure)
+        return PreparedTrack(authored.copy(cues = cues), synth, disclosure)
+    }
+
+    /**
+     * One [Cue] per subtitle line: a `SPOKEN_SUBTITLE` booking with a single
+     * variant, the line's own text, rendered and measured here so the cue is
+     * built from a duration that exists. Ids are `s1`...`sN` in file order; the
+     * asset's description ids are checked against them and a collision fails
+     * here rather than three layers into playback, where `DescriptionTrack`
+     * would otherwise reject the merged track with nothing naming why.
+     */
+    private fun buildSubtitleCues(
+        lines: List<SubtitleLine>,
+        authored: DescriptionTrack,
+        synth: SpeechSynth,
+        log: (String) -> Unit,
+    ): List<Cue> {
+        val ids = lines.indices.map { CueId("s${it + 1}") }
+        val collision = authored.cues.map { it.id }.firstOrNull { id -> id in ids }
+        require(collision == null) {
+            "cue id $collision is used by both the bundled track and a spoken subtitle; " +
+                "subtitle ids must not collide with the asset's"
+        }
+
+        val starts = SubtitlePlacement.startsFor(lines, authored.silence)
+        val cues = lines.mapIndexed { index, line ->
+            val id = ids[index]
+            // Cue files are named "<key>", and a description renders as
+            // "d<i>-<j>"; the s prefix cannot collide with that, so this line's
+            // file is its own.
+            val rendered = synth.render("${id.value}-0", line.text)
+            log(
+                "subtitle measured cue=$id lineStartMs=${line.startMs} lineEndMs=${line.endMs} " +
+                    "placedMs=${starts[index]} engine=${synth.engineId} frames=${rendered.frameCount} " +
+                    "rate=${rendered.sampleRateHz}Hz measuredMs=${rendered.duration.millis} " +
+                    "file=${File(rendered.audioRef).name}",
+            )
+            Cue(
+                id = id,
+                startMs = starts[index],
+                kind = Scheduled.SPOKEN_SUBTITLE,
+                variants = listOf(Variant(line.text, rendered.duration, rendered.audioRef)),
+            )
+        }
+        log("subtitles prepared lines=${lines.size} cues=${cues.size}")
+        return cues
     }
 
     /**

@@ -91,7 +91,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun prepareThenPlay() {
-        val prepared = runCatching { TrackPreparation.prepare(this, ::log) }
+        // Listening tests / demo runs: `--ez descriptions false` and
+        // `--ez spokenSubtitles false` turn each voice off at the source, so a
+        // run with subtitles withheld is one that never rendered them. Both
+        // default to on; the on-screen subtitle track is unaffected by either.
+        val prepared = runCatching {
+            TrackPreparation.prepare(
+                this,
+                descriptions = intent.getBooleanExtra("descriptions", true),
+                spokenSubtitles = intent.getBooleanExtra("spokenSubtitles", true),
+                log = ::log,
+            )
+        }
             .onFailure { log("ERROR track preparation failed: $it") }
             .getOrNull()
 
