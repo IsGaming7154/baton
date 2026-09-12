@@ -42,11 +42,15 @@ data class OverlayState(
  *
  * ## Why a blind viewer never hears this
  *
- * [Modifier.semantics] with [invisibleToUser] marks the whole subtree present
- * on screen but absent from the accessibility tree Fire TV's VoiceView reads
- * from -- not the same thing as leaving off a content description, which
- * would still stop VoiceView here and announce an unlabeled element. This is
- * "does not exist" to VoiceView rather than "exists and has nothing to say."
+ * [Modifier.semantics] with [invisibleToUser] marks the subtree not visible to
+ * the user in the node info VoiceView reads (`isVisibleToUser = false`,
+ * AndroidComposeViewAccessibilityDelegateCompat.android.kt:923, Compose 1.6.8)
+ * and keeps exploration hit-testing from finding it (:2119-2121) -- not the
+ * same thing as leaving off a content description, which would still offer
+ * VoiceView an unlabeled element. It is not "does not exist", though: the node
+ * stays in the virtual tree Compose builds (:3640-3679), and a focus change on
+ * it would still send `TYPE_VIEW_FOCUSED` (:2678-2685). That path cannot arise
+ * here, because nothing below can take focus.
  *
  * Nothing here can take D-pad focus either, independently of that: every
  * element is a plain [Text], and only a component built to be clickable or

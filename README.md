@@ -28,7 +28,7 @@ This is a hackathon project. The honest scope:
 - `:player` — ExoPlayer adapter. Plays the clip, reports position and playback state, ducks the content, and meters the content's loudness live in the render chain.
 - `:speech` — text-to-speech engine selection, rendering to WAV, the intelligibility chain, loudness normalisation, and `AudioTrack` playback with observed (not timed) completion.
 - `:loudness` — ITU-R BS.1770-4 in full: K-weighting, gated integrated LUFS, a sliding short-term meter, a 4× polyphase true-peak meter.
-- `:app` — the tracer. One bundled clip, one bundled description track, six cues, the whole timeline logged under a single tag.
+- `:app` — the tracer. One bundled clip, one bundled description track, six cues, the whole timeline logged under a single tag. A transport bar — Rewind, Play/Pause, Fast-forward — is the whole UI: each focus change is spoken as `UI_NARRATION` through the director, ducking the film, and is cut off by the next press.
 - `:pipeline` — the offline track builder, complete and exercised end to end against recorded fixtures shaped like real Amazon Transcribe, Nova and Polly responses.
 
 The tracer has been run on a Fire TV Stick, and the device measurements quoted throughout this document come from those runs; they are labelled where they appear. Everything else here was verified from the repository itself.
@@ -36,9 +36,9 @@ The tracer has been run on a Fire TV Stick, and the device measurements quoted t
 **Designed, specified, not built**
 
 - The live AWS pipeline. `:pipeline`'s ports are defined against Transcribe, Bedrock Nova and Polly, and its fixtures are stored in those services' own response shapes so the parsers are the real ones — but no AWS SDK is on the classpath and nothing in the repository makes a network call. This is deliberate: the loop that has to be right is the one that runs for free.
-- Reactive speech. The director arbitrates `UI_NARRATION` and `VQA_ANSWER` today, and their preemption behaviour is tested, but nothing in the app raises one yet. There is no question ring and no visual question answering.
+- Reactive speech beyond menu narration. The director arbitrates `VQA_ANSWER` today, and its preemption behaviour is tested, but nothing in the app raises one yet. There is no question ring and no visual question answering.
 - Spoken subtitles from a live subtitle track. The kind exists and outranks description in the policy; the app does not yet parse a subtitle stream.
-- The accessible UI: screen curtain, the access-services row, per-title description state, density and length settings. Specified in [`PRD.md`](PRD.md); the app currently shows a Media3 player view and nothing else.
+- The accessible UI: screen curtain, the access-services row, per-title description state, density and length settings. Specified in [`PRD.md`](PRD.md); the app currently shows the video and the transport bar and nothing else.
 
 **Not possible, and why it is worth saying**
 
@@ -109,19 +109,55 @@ Everything logs under one tag, and the run reads end to end:
 adb logcat -s Baton:V
 ```
 
-These are the line shapes it emits, not a transcript of a particular run: which engines are installed and which was chosen and why, the frame count and measured duration of every rendered variant, every duck decision beside the loudness it was computed from, and every cue starting, ending and being dropped.
+These are the line shapes it emits, not a transcript of a particular run: which engines are installed and which was chosen and why, the frame count and measured duration of every rendered variant, every duck decision beside the loudness it was computed from, every cue starting, ending and being dropped, and every piece of UI narration the viewer asked for.
 
 ```
 track loaded asset=… source=sintel-01m41s cues=7 gaps=5 synthetic=true
 variant measured cue=d1 variant=0 engine=… frames=… measuredMs=… authoredMs=1968
+narration measured phrase="Play, button" engine=… frames=… rate=…Hz measuredMs=… file=narration1.wav
 duck target=…dB programmeLufs=…
 cue start id=cue:d1 kind=AUDIO_DESCRIPTION cue=d1 variant=0 atPositionMs=… measuredMs=… endsAtMs=…
 floor released id=cue:d1 by=speaker
+reactive requested id=ui-3 kind=UI_NARRATION phrase="Fast forward, button"
+cue start id=ui-3 kind=UI_NARRATION atPositionMs=…
+floor released id=ui-3 by=preempted
+reactive unavailable kind=UI_NARRATION phrase="Play, button" reason=not-prepared
 cue dropped id=… kind=… atPositionMs=… reason=NoVariantFits(…)
 state positionMs=… playback=… volume=… gain=… sinkLatencyMs=… programmeLufs=…
 ```
 
-`duck target=` is logged next to the loudness measurement it was derived from, because a depth on its own is unreadable — −6 dB is either right or badly wrong depending on how loud the film was. A floor released by timeout rather than by the speaker is logged as `ANOMALY`, and so is a stall long enough to be worth seeing.
+`duck target=` is logged next to the loudness measurement it was derived from, because a depth on its own is unreadable — −6 dB is either right or badly wrong depending on how loud the film was. A floor released by timeout rather than by the speaker is logged as `ANOMALY`, and so is a stall long enough to be worth seeing. `reactive unavailable … reason=not-prepared` is expected for any focus change before the track has finished preparing: until then there is no director to speak through.
+
+---
+
+## Remote bindings
+
+VoiceView, Fire TV's screen reader, owns five remote gestures. Baton binds none of them, so using the app never toggles Review Mode, the text banner or the magnifier (PRD.md, "Remote control mapping"):
+
+| Gesture | VoiceView uses it for |
+|---|---|
+| Menu, long press | Review Mode |
+| Back + Menu | VoiceView on and off |
+| Menu + Select | Exploration Mode |
+| Rewind + Fast-Forward | Text Banner |
+| Back + Fast-Forward | Screen Magnifier |
+
+What the app does with the remote:
+
+| Key | Does | Bound by |
+|---|---|---|
+| D-pad left / right | Moves focus along the transport bar; each landing is announced, e.g. "Play, button" | Compose focus, not the app |
+| Select, short press | Activates the focused button | tv-material `Button`, not the app |
+| Play/Pause, short press | Toggles playback and announces "Playing" or "Paused" | `RemoteBindings.togglesPlayback`, the only key the app binds itself |
+| Back | Leaves the app | Nothing; the system default |
+
+Left unbound on purpose:
+
+- **Menu, pressed or held.** A long press is VoiceView's Review Mode and Menu is half of two of its chords. A short press is reserved for the question ring (issue #9).
+- **The Rewind and Fast-Forward keys.** Bound a key at a time, as Media3's own controller binds them, both would fire on the Rewind + Fast-Forward chord VoiceView uses for the text banner. The on-screen Rewind and Fast-forward buttons seek instead, by Media3's default 5 s back and 15 s forward.
+- **Every long press and every chord.** A held key repeats, and `RemoteBindings` acts only on the first key down.
+
+`RemoteBindingsTest` checks the mapping on the JVM.
 
 ---
 
@@ -167,7 +203,7 @@ Every entry below is used in the shipped code.
 - **`ExoPlayer.setVolume`** — the active duck. It applies *after* `DefaultAudioSink`'s internal queue rather than before it, which is the difference between a duck that is audible in 154 ms and one that is inaudible for most of a second.
 - **`Player.Listener.onPositionDiscontinuity`** with **`DISCONTINUITY_REASON_SEEK`** — what the director rebaselines on.
 - **`Player.isPlaying`, `playWhenReady`, `playbackSuppressionReason`, `PLAYBACK_SUPPRESSION_REASON_NONE`, `STATE_BUFFERING`** — pulled apart deliberately. `isPlaying` is a conjunction of three facts that answers "is the position advancing" and throws away which of the three failed; Baton needs to distinguish a viewer's pause from a buffering stall, and this is the only place in the system that can.
-- **`androidx.media3.ui.PlayerView`** — the transport bar, hosted through Compose interop. Its built-in controller already answers D-pad play/pause, rewind and fast-forward.
+- **`androidx.media3.ui.PlayerView`** — the picture and the subtitles, hosted through Compose interop, with its built-in controller off (`useController = false`). The controller's buttons are Views that VoiceView would announce and the director would never hear, so the transport controls are Compose.
 
 ### Android platform — `:speech`
 
@@ -180,7 +216,10 @@ Every entry below is used in the shipped code.
 
 ### Android TV / Compose — `:app`
 
-- **`androidx.tv:tv-material:1.0.0`** (`androidx.tv.material3.Surface`), Compose BOM 2024.06.00, `androidx.activity.compose.setContent`.
+- **`androidx.tv:tv-material:1.0.0`** (`androidx.tv.material3.Surface`, `Button`, `Text`), Compose BOM 2024.06.00, `androidx.activity.compose.setContent`.
+- **`Modifier.onFocusChanged`** — turns each focus landing on a transport button into a `UI_NARRATION` request to the director. **`Modifier.semantics { contentDescription; invisibleToUser() }`** carries the narration text for the composition-tree test and hides the node from VoiceView; **`FocusRequester`** puts initial focus on Play/Pause.
+- **`Activity.dispatchKeyEvent`** — the one key the app binds, Play/Pause. See "Remote bindings".
+- Tests: **`androidx.compose.ui:ui-test-junit4`** over **Robolectric 4.13** at `sdk = 28`, run on the JUnit Platform beside kotest through **`junit-vintage-engine`**.
 - Manifest: **`android.software.leanback`** and **`LEANBACK_LAUNCHER`**, which is what puts the app on the Fire TV home row.
 
 ### Implemented in-house because the platform offers nothing — `:loudness`
@@ -293,7 +332,8 @@ Numbers attributed to the device were measured on hardware in an earlier session
 Open, and not hidden:
 
 - **An overrun is bounded, not eliminated.** The director withdraws the floor from an utterance that has run past the silence window it was granted, or past its speaker deadline -- modelled as `Speaking.Withdrawn` carrying a `Withdrawal` whose `WithdrawalReason` is `OutOfSilence`, `SpeakerOverdue`, or `NeverMeasured` (`Directive.kt`). `Tracer` acts on it by calling `speaker.stop(id)` and logs an `ANOMALY floor withdrawn` line carrying both `measuredMs` and `heldForMs`, so the price of the policy is legible afterwards. What is not bounded is the withdrawal's own latency: the overrun is the 50 ms director tick plus however long the platform's `AudioTrack` takes to actually go quiet after `stop()` -- and that second term has never been measured on the device. Baton does not claim a zero-overlap guarantee. It claims a bounded and reported one.
-- The live AWS pipeline, reactive speech, the question ring, spoken subtitles from a live track, and the accessible UI surfaces are all specified and unbuilt. See the scope section above.
+- **VoiceView's silence inside Baton is not device-verified.** The transport buttons are `invisibleToUser`, so VoiceView has no node of its own to read out, but Compose 1.6.8 still sends `TYPE_VIEW_FOCUSED` for a focused node that is invisible to the user. Whether VoiceView speaks on that event — a second voice on top of Baton's own narration — can only be answered on the Fire TV Stick with VoiceView on.
+- The live AWS pipeline, visual question answering, the question ring, spoken subtitles from a live track, and the accessible UI surfaces beyond the transport bar are all specified and unbuilt. See the scope section above.
 
 ---
 
