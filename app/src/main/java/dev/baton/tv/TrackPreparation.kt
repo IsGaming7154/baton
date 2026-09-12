@@ -15,10 +15,16 @@ import java.io.File
 import java.util.Locale
 
 /**
- * A track the director may act on, the disclosure sentence it may owe, and the
- * synthesizer whose audio both were measured from.
+ * A track the director may act on, the disclosure sentence it may owe, the transport
+ * bar's phrases keyed by their text, and the synthesizer whose audio all of them were
+ * measured from.
  */
-class PreparedTrack(val track: DescriptionTrack, val synth: SpeechSynth?, val disclosure: Variant?)
+class PreparedTrack(
+    val track: DescriptionTrack,
+    val synth: SpeechSynth?,
+    val disclosure: Variant?,
+    val narration: Map<String, Variant>,
+)
 
 /**
  * Turns the authored track in the APK into one the director is allowed to trust.
@@ -106,7 +112,7 @@ object TrackPreparation {
                     "withholding ${authored.cues.size} cues and ${subtitleLines.size} subtitle lines " +
                     "rather than scheduling audio that does not exist",
             )
-            return PreparedTrack(authored.copy(cues = emptyList()), null, null)
+            return PreparedTrack(authored.copy(cues = emptyList()), null, null, emptyMap())
         }
 
         val startedAtMs = System.currentTimeMillis()
@@ -117,6 +123,7 @@ object TrackPreparation {
             emptyList()
         }
         val disclosure = measureDisclosure(synth, log)
+        val narration = measureNarration(synth, log)
 
         // Concatenated, not sorted: the director's validation asks only that ids
         // be unique, and both its linear cue walk and the rooms it derives treat
@@ -130,8 +137,28 @@ object TrackPreparation {
         check(cues.all { cue -> cue.variants.all { it.audioRef != null } }) {
             "a scheduled variant reached the director without pre-rendered audio"
         }
-        return PreparedTrack(authored.copy(cues = cues), synth, disclosure)
+        return PreparedTrack(authored.copy(cues = cues), synth, disclosure, narration)
     }
+
+    /**
+     * The transport bar's phrases ([TransportNarration.PHRASES]), keyed by their text.
+     *
+     * Rendered and measured here for the reasons the disclosure is: the speaker plays
+     * only rendered files, and a reactive utterance with a measured length is held to
+     * that length plus the slack rather than to the fifteen-second ceiling for speech
+     * nothing measured. A key with no dash cannot collide with a cue's
+     * "<cue>-<variant>" file.
+     */
+    private fun measureNarration(synth: SpeechSynth, log: (String) -> Unit): Map<String, Variant> =
+        TransportNarration.PHRASES.withIndex().associate { (index, phrase) ->
+            val rendered = synth.render("narration$index", phrase)
+            log(
+                "narration measured phrase=\"$phrase\" engine=${synth.engineId} frames=${rendered.frameCount} " +
+                    "rate=${rendered.sampleRateHz}Hz measuredMs=${rendered.duration.millis} " +
+                    "file=${File(rendered.audioRef).name}",
+            )
+            phrase to Variant(text = phrase, measuredDuration = rendered.duration, audioRef = rendered.audioRef)
+        }
 
     /**
      * One [Cue] per subtitle line: a `SPOKEN_SUBTITLE` booking with a single

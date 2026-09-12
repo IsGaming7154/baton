@@ -8,6 +8,7 @@ import dev.baton.director.ContentDuck
 import dev.baton.director.Directive
 import dev.baton.director.DirectorInputs
 import dev.baton.director.InputEvent
+import dev.baton.director.ReactiveRequest
 import dev.baton.director.Speaking
 import dev.baton.ports.ContentGain
 import dev.baton.ports.PlaybackClock
@@ -68,6 +69,17 @@ class Tracer(
     /** Called by the player when playback jumps. */
     fun onSeek() {
         inbox += InputEvent.Seeked
+    }
+
+    /**
+     * A voice the viewer asked for. Queued like every other event, so it reaches the
+     * director on the next tick in the order it happened -- behind a seek that came
+     * first, ahead of one that came after. Whether it speaks, and over what, is the
+     * director's call.
+     */
+    fun request(request: ReactiveRequest) {
+        log("reactive requested id=${request.id} kind=${request.kind} phrase=\"${request.text}\"")
+        inbox += InputEvent.ReactiveRequested(request)
     }
 
     fun start() {
