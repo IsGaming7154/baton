@@ -70,6 +70,13 @@ class MainActivity : ComponentActivity() {
     /** `playWhenReady`: whether the viewer wants the film moving, which is what the Play/Pause button shows. */
     private var playing by mutableStateOf(false)
 
+    /**
+     * Whether preparation has come back, successfully or not. Until then the transport
+     * does nothing: a Play press on 2026-09-12 started the film 12 s before the director
+     * existed, so the first subtitle was never spoken and the disclosure came late.
+     */
+    private var trackReady = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         overlayEnabled = intent.getBooleanExtra("overlay", false)
@@ -100,9 +107,9 @@ class MainActivity : ComponentActivity() {
                 }
                 TransportBar(
                     playing = playing,
-                    onRewind = { player.exoPlayer.seekBack() },
+                    onRewind = { if (transportReady("rewind")) player.exoPlayer.seekBack() },
                     onPlayPause = ::togglePlayback,
-                    onFastForward = { player.exoPlayer.seekForward() },
+                    onFastForward = { if (transportReady("fast-forward")) player.exoPlayer.seekForward() },
                     announce = ::announce,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp),
                 )
@@ -183,6 +190,7 @@ class MainActivity : ComponentActivity() {
             // cue that arrives before it refills is ducked by the static fallback.
             val seekMs = intent.getLongExtra("seekMs", 0L)
             if (seekMs > 0L) player.exoPlayer.seekTo(seekMs)
+            trackReady = true
             log("playback starting")
             player.play()
             val playForMs = intent.getLongExtra("playForMs", 0L)
@@ -256,9 +264,16 @@ class MainActivity : ComponentActivity() {
      * the floor first and the request then takes it (AudioDirector.advance).
      */
     private fun togglePlayback() {
+        if (!transportReady("play-pause")) return
         val exo = player.exoPlayer
         exo.playWhenReady = !exo.playWhenReady
         announce(TransportNarration.state(exo.playWhenReady))
+    }
+
+    /** Refused silently before [trackReady]: nothing is rendered yet to say it with. The log line is the trace. */
+    private fun transportReady(control: String): Boolean {
+        if (!trackReady) log("transport refused control=$control reason=not-prepared")
+        return trackReady
     }
 
     /**
