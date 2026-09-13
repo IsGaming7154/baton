@@ -66,7 +66,7 @@ This is the command that is known to work. Run here with `--rerun-tasks`, so not
 
 **318 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
 
-That is 230 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants, which accounts for 50 of the other 51 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,122,988 bytes.
+That is 253 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest` runs on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,122,988 bytes.
 
 Nothing here needs a device, a network, an emulator, or an AWS account. `:director`, `:loudness` and `:pipeline` are pure-JVM modules and their tests are plain JUnit.
 

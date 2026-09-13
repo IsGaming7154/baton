@@ -420,7 +420,7 @@ So on 1.4.1, `DuckingAudioProcessor` gets no platform-given signal that a seek h
 **Severity:** high — this one pattern sat on the path every track load calls, so its failure meant no disclosure, no descriptions, no subtitles and no narration spoke at all
 **Area:** `java.util.regex` / Dalvik vs. desktop JVM (API 28)
 
-**What was attempted.** Strip SSA/ASS override codes such as `{\an8}` out of a subtitle cue's text before it is spoken or shown, using a regex written and tested entirely on the desktop toolchain — 318 Robolectric-backed JVM tests, all green, before this ever ran on a device.
+**What was attempted.** Strip SSA/ASS override codes such as `{\an8}` out of a subtitle cue's text before it is spoken or shown, using a regex written and tested entirely on the desktop toolchain — the pattern lives in the pure-JVM `:director` module, and all 318 JVM test executions were green before this ever ran on a device.
 
 **What happened.** On the Fire TV Stick (AFTSSS, Fire OS 7.7.1.5, Android 9 / API 28) track preparation failed the instant the track loaded:
 
@@ -431,7 +431,7 @@ So on 1.4.1, `DuckingAudioProcessor` gets no platform-given signal that a seek h
 09-12 17:41:13.479 I/Baton   (10945):         ^
 ```
 
-The pattern was `SubtitleFile.kt`'s SSA-override strip, `\{[^}]*}` — a bare, unescaped closing brace. Per commit `aa5fced`'s own message: "Android's `java.util.regex` is ICU, which rejects a bare closing brace; the desktop JVM accepts it, so every test passed." All 318 JVM tests exercise this same pattern and none of them saw the failure, because Robolectric runs it under the host JVM's own regex engine, not the device's.
+The pattern was `SubtitleFile.kt`'s SSA-override strip, `\{[^}]*}` — a bare, unescaped closing brace. Per commit `aa5fced`'s own message: "Android's `java.util.regex` is ICU, which rejects a bare closing brace; the desktop JVM accepts it, so every test passed." The subtitle tests exercise this pattern on the host JVM's regex engine, so none of them saw the failure; the Robolectric tests in `:app` would not have caught it either, because Robolectric uses the host JVM's engine too, not the device's.
 
 Because the exception was thrown during track preparation, nothing downstream ever ran. The same run's log shows the app pinned at start forever: every heartbeat after the exception reads `state positionMs=0 playback=PAUSED ... framesProcessed=0`, and a Play press logs `reactive unavailable kind=UI_NARRATION phrase="Play, button" reason=not-prepared` — no disclosure, no description, no subtitle, no narration spoke, because the director that would have scheduled them was never built.
 
@@ -439,7 +439,7 @@ Because the exception was thrown during track preparation, nothing downstream ev
 
 **Workaround (shipped).** Escape the closing brace: `\{[^}]*\}` (`aa5fced`).
 
-**Ask.** Nothing to ask of Amazon or Google here — a bare `}` outside a quantifier being invalid under ICU and valid under OpenJDK's own regex engine is a pre-existing divergence between two independently-maintained regex engines, not a Fire OS defect. Recorded because of what it costs a Robolectric-only test suite: a pattern that passed all 318 JVM tests was a syntax error on every real device, and nothing short of a hardware run could have shown it.
+**Ask.** Nothing to ask of Amazon or Google here — a bare `}` outside a quantifier being invalid under ICU and valid under OpenJDK's own regex engine is a pre-existing divergence between two independently-maintained regex engines, not a Fire OS defect. Recorded because of what it costs a JVM-only test suite: a pattern that passed every JVM test was a syntax error on the device, and only a run on Android's own runtime (a device or an emulator) could have shown it.
 
 ---
 
