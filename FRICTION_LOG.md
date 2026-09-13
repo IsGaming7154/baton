@@ -415,4 +415,69 @@ So on 1.4.1, `DuckingAudioProcessor` gets no platform-given signal that a seek h
 
 ---
 
+## 17. Android's regex engine is ICU-backed and rejects a pattern the desktop JVM — and Robolectric — accept
+
+**Severity:** high — this one pattern sat on the path every track load calls, so its failure meant no disclosure, no descriptions, no subtitles and no narration spoke at all
+**Area:** `java.util.regex` / Dalvik vs. desktop JVM (API 28)
+
+**What was attempted.** Strip SSA/ASS override codes such as `{\an8}` out of a subtitle cue's text before it is spoken or shown, using a regex written and tested entirely on the desktop toolchain — 318 Robolectric-backed JVM tests, all green, before this ever ran on a device.
+
+**What happened.** On the Fire TV Stick (AFTSSS, Fire OS 7.7.1.5, Android 9 / API 28) track preparation failed the instant the track loaded:
+
+```
+09-12 17:41:13.320 I/Baton   (10945): track loaded asset=sample_clip.track.json source=sintel-01m41s-de-dub locale=en-US cues=6 gaps=11 synthetic=true
+09-12 17:41:13.479 I/Baton   (10945): ERROR track preparation failed: java.util.regex.PatternSyntaxException: Syntax error in regexp pattern near index 8
+09-12 17:41:13.479 I/Baton   (10945): \{[^}]*}
+09-12 17:41:13.479 I/Baton   (10945):         ^
+```
+
+The pattern was `SubtitleFile.kt`'s SSA-override strip, `\{[^}]*}` — a bare, unescaped closing brace. Per commit `aa5fced`'s own message: "Android's `java.util.regex` is ICU, which rejects a bare closing brace; the desktop JVM accepts it, so every test passed." All 318 JVM tests exercise this same pattern and none of them saw the failure, because Robolectric runs it under the host JVM's own regex engine, not the device's.
+
+Because the exception was thrown during track preparation, nothing downstream ever ran. The same run's log shows the app pinned at start forever: every heartbeat after the exception reads `state positionMs=0 playback=PAUSED ... framesProcessed=0`, and a Play press logs `reactive unavailable kind=UI_NARRATION phrase="Play, button" reason=not-prepared` — no disclosure, no description, no subtitle, no narration spoke, because the director that would have scheduled them was never built.
+
+**Sources.** Commit `aa5fced` (message and diff). Logcat `stick_run1/baton_logcat.txt` (the `PatternSyntaxException` and the frozen `state`/`reactive unavailable` lines that follow it, quoted above) and `stick_run3/full_logcat.txt` (`track loaded ... cues=6 gaps=11 ...` followed by `track prepared engine=com.ivona.tts.oem inMs=17126 descriptions=6 spokenSubtitles=12`, with no `PatternSyntaxException` anywhere in that run). Probe: `regexprobe/Probe.java`, compiled and pushed to the device as `classes.dex` and run there with `app_process`; `aa5fced`'s message records the probe's result — the original pattern fails on-device, `\{[^}]*\}` compiles and strips `{\an8}`, and the file's other patterns already compiled there. Current source, the fixed line: `director/src/main/kotlin/dev/baton/director/SubtitleFile.kt:78`.
+
+**Workaround (shipped).** Escape the closing brace: `\{[^}]*\}` (`aa5fced`).
+
+**Ask.** Nothing to ask of Amazon or Google here — a bare `}` outside a quantifier being invalid under ICU and valid under OpenJDK's own regex engine is a pre-existing divergence between two independently-maintained regex engines, not a Fire OS defect. Recorded because of what it costs a Robolectric-only test suite: a pattern that passed all 318 JVM tests was a syntax error on every real device, and nothing short of a hardware run could have shown it.
+
+---
+
+## 18. Media3 1.4.1's `RawResourceDataSource` needs the packaged resource stored, not deflated — and treats a failing sidecar as fatal to the whole media item
+
+**Severity:** high — the film itself never started
+**Area:** AndroidX Media3 datasource (pinned 1.4.1) / Android Asset Packaging Tool
+
+**What was attempted.** Ship a bundled English subtitle sidecar, `res/raw/sample_clip_en.srt`, as a `SubtitleConfiguration` on the same `MediaItem` as the film's video and audio, opened by Media3's `RawResourceDataSource`.
+
+**What happened.** On the Fire TV Stick the film never started. The full exception chain, `stick_run2/full_logcat.txt:371-397`:
+
+```
+E/ExoPlayerImplInternal: Playback error
+  androidx.media3.exoplayer.ExoPlaybackException: Source error
+  Caused by: androidx.media3.datasource.RawResourceDataSource$RawResourceDataSourceException
+      at androidx.media3.datasource.RawResourceDataSource.openAssetFileDescriptor(RawResourceDataSource.java:282)
+      at androidx.media3.datasource.RawResourceDataSource.open(RawResourceDataSource.java:137)
+  Caused by: android.content.res.Resources$NotFoundException: File res/raw/sample_clip_en.srt from drawable resource ID #0x7f0c0001
+      at android.content.res.ResourcesImpl.openRawResourceFd(ResourcesImpl.java:318)
+      at android.content.res.Resources.openRawResourceFd(Resources.java:1308)
+      at androidx.media3.datasource.RawResourceDataSource.openAssetFileDescriptor(RawResourceDataSource.java:280)
+  Caused by: java.io.FileNotFoundException: This file can not be opened as a file descriptor; it is probably compressed
+      at android.content.res.AssetManager.nativeOpenNonAssetFd(Native Method)
+      at android.content.res.AssetManager.openNonAssetFd(AssetManager.java:911)
+      at android.content.res.ResourcesImpl.openRawResourceFd(ResourcesImpl.java:315)
+```
+
+Decompiling `media3-datasource-1.4.1.aar`'s `classes.jar` with `javap` — no 1.4.1 sources jar exists anywhere in the Gradle cache, only the AAR, the same situation as entry 16 at this pinned version — confirms the call in the trace: `RawResourceDataSource`'s private `openAssetFileDescriptor(Context, DataSpec)` invokes `android.content.res.Resources.openRawResourceFd(int)` directly, with no fallback path. `openRawResourceFd` needs an actual file descriptor onto the APK's zip entry, which only works when that entry is stored uncompressed; per `cbab06b`'s commit message, `aapt` had deflated the `.srt` (unknown extensions are not on its default no-compress list), while the `.mp4` was already stored.
+
+Baton bundles the subtitle sidecar on the same `MediaItem` as the video and audio, so the sidecar's failure to open took the entire item down, not just the subtitle track. The app's own track-preparation pipeline is independent of ExoPlayer and still completed seventeen seconds later (`track prepared engine=com.ivona.tts.oem ... descriptions=6 spokenSubtitles=12`, line 762 of the same run), but every `state` heartbeat for the rest of that run kept reading `positionMs=0 ... framesProcessed=0`: the director was ready with cues to schedule, and there was no playing film to schedule them against.
+
+**Sources.** Commit `cbab06b` (message and diff, `app/build.gradle.kts`). Logcat `stick_run2/full_logcat.txt:371-397` (the exception chain above, and the `framesProcessed=0` heartbeats that follow it for the rest of the run) and `stick_run3/full_logcat.txt:1695` (`track prepared ... inMs=17126`, with no `RawResourceDataSourceException` anywhere in the run, both this fix and entry 17's applied). `media3-datasource-1.4.1.aar` (Gradle cache: `androidx.media3/media3-datasource/1.4.1/.../media3-datasource-1.4.1.aar`), `classes.jar!androidx/media3/datasource/RawResourceDataSource.class`, decompiled with `javap -p -c` (JDK 21).
+
+**Workaround (shipped).** `androidResources { noCompress += "srt" }` in `app/build.gradle.kts` (`cbab06b`, AGP 8.6.1). `unzip -v` on the rebuilt APK shows the entry `Stored` rather than deflated (`cbab06b`'s commit message: 785 bytes, stored).
+
+**Ask.** The three-layer exception a developer actually sees — `RawResourceDataSourceException` → `Resources$NotFoundException` → `FileNotFoundException`: "it is probably compressed" — never names Gradle, `aapt`, or `noCompress`; the message is accurate but the fix lives one abstraction layer below anything in the trace. A line in `RawResourceDataSource`'s own documentation, pointing at `androidResources.noCompress` for any raw-resource extension outside the platform's default no-compress list, would turn this from an afternoon of exception-chain archaeology into a one-line fix from the start.
+
+---
+
 *Entries are appended as they are encountered. This log is a deliverable, not a postscript.*
