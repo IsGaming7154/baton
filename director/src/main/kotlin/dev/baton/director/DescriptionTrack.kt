@@ -327,11 +327,19 @@ data class DescriptionTrack(
     val gapMap: List<Gap>,
     val cues: List<Cue>,
     val synthetic: Boolean = true,
+    /**
+     * When the source this track was built for carries a dub voiced by synthetic speech,
+     * the sentence that tells a sighted viewer so, shown on screen as written. A fact about
+     * the title, so it travels with the title's track rather than living in the UI. Null,
+     * the default, is a source whose dialogue is its own performance.
+     */
+    val syntheticDub: String? = null,
 ) {
     init {
         require(formatVersion >= 1) { "formatVersion must be >= 1, was $formatVersion" }
         require(sourceId.isNotBlank()) { "sourceId must not be blank" }
         require(locale.isNotBlank()) { "locale must not be blank" }
+        require(syntheticDub == null || syntheticDub.isNotBlank()) { "syntheticDub must be null or a sentence" }
         require(cues.distinctBy { it.id }.size == cues.size) { "cue ids must be unique within a track" }
     }
 

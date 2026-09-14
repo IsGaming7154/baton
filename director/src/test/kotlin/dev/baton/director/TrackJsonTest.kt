@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import kotlinx.serialization.SerializationException
 
 /**
@@ -52,6 +53,12 @@ class TrackJsonTest : FunSpec({
 
     test("the synthetic marker is always written, because the app has to announce it") {
         DescriptionTrackJson.encode(track) shouldContain "\"synthetic\": true"
+    }
+
+    test("a synthetic dub is optional: absent from a track without one, and round trips on a track with one") {
+        DescriptionTrackJson.encode(track) shouldNotContain "syntheticDub"
+        val dubbed = track.copy(syntheticDub = "The German dub in this title uses synthetic voices (Amazon Polly).")
+        DescriptionTrackJson.decode(DescriptionTrackJson.encode(dubbed)) shouldBe dubbed
     }
 
     test("an empty track round trips") {

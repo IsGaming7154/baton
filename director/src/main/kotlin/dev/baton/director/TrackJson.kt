@@ -1,5 +1,7 @@
 package dev.baton.director
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -61,12 +63,18 @@ object DescriptionTrackJson {
     fun decode(text: String): DescriptionTrack = json.decodeFromString(TrackSurrogate.serializer(), text).toTrack()
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 private data class TrackSurrogate(
     val formatVersion: Int,
     val sourceId: String,
     val locale: String,
     val synthetic: Boolean,
+    // Optional, and left off the wire when null despite encodeDefaults: a track
+    // written before the field existed decodes unchanged, and a track with no dub
+    // still encodes byte for byte as it did (the pipeline's golden files).
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val syntheticDub: String? = null,
     val gapMap: List<GapSurrogate>,
     val cues: List<CueSurrogate>,
 )
@@ -95,6 +103,7 @@ private fun DescriptionTrack.toSurrogate() = TrackSurrogate(
     sourceId = sourceId,
     locale = locale,
     synthetic = synthetic,
+    syntheticDub = syntheticDub,
     gapMap = gapMap.map { GapSurrogate(it.startMs, it.endMs) },
     cues = cues.map { cue ->
         CueSurrogate(
@@ -125,6 +134,7 @@ private fun TrackSurrogate.toTrack(): DescriptionTrack {
             )
         },
         synthetic = synthetic,
+        syntheticDub = syntheticDub,
     )
 }
 
