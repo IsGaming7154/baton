@@ -3,6 +3,7 @@
   "sourceId": "sintel-01m41s-de-dub",
   "locale": "en-US",
   "synthetic": true,
+  "syntheticDub": "The German dub in this title uses synthetic voices (Amazon Polly).",
   "gapMap": [
     { "startMs": 0, "endMs": 3942 },
     { "startMs": 6642, "endMs": 9842 },

@@ -239,8 +239,11 @@ object TrackPreparation {
      * ponytail: English only, because the only bundled track is en-US and the
      * sentence is spoken in that track's voice. Choose the wording by track locale
      * when a track in another language ships.
+     *
+     * Public because `SyntheticVoiceNotice` shows this same sentence on screen, so what
+     * is said and what is shown cannot drift apart.
      */
-    private const val DISCLOSURE_TEXT = "Descriptions in this title use a synthetic voice."
+    const val DISCLOSURE_TEXT = "Descriptions in this title use a synthetic voice."
 
     private fun measure(cue: Cue, synth: SpeechSynth, log: (String) -> Unit): Cue {
         val variants = cue.variants.mapIndexed { index, variant ->

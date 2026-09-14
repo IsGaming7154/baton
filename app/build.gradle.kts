@@ -113,10 +113,14 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
-    // ShellNarrationTest launches the ComponentActivity that ui-test-manifest
-    // declares, and ui-test-manifest is debug-only, so the release unit-test
-    // variant has no activity to launch. It runs under testDebugUnitTest.
+    // ShellNarrationTest and SyntheticVoiceNoticeTest launch the ComponentActivity
+    // that ui-test-manifest declares, and ui-test-manifest is debug-only, so the
+    // release unit-test variant has no activity to launch. They run under
+    // testDebugUnitTest.
     if (name == "testReleaseUnitTest") {
-        filter { excludeTestsMatching("dev.baton.tv.ShellNarrationTest") }
+        filter {
+            excludeTestsMatching("dev.baton.tv.ShellNarrationTest")
+            excludeTestsMatching("dev.baton.tv.SyntheticVoiceNoticeTest")
+        }
     }
 }

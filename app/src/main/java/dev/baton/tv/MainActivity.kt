@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.tv.material3.Surface
 import dev.baton.director.AudioDirector
+import dev.baton.director.DescriptionTrack
 import dev.baton.director.DirectorConfig
 import dev.baton.director.ReactiveRequest
 import dev.baton.director.SpeechLength
@@ -77,6 +78,13 @@ class MainActivity : ComponentActivity() {
      */
     private var trackReady = false
 
+    /**
+     * The track whose synthetic-voice notice is on screen. Set when preparation returns it,
+     * which is when playback starts, and cleared [NOTICE_MS] later so the notice does not
+     * sit over the film for the whole session; the spoken disclosure covers the rest.
+     */
+    private var noticeTrack by mutableStateOf<DescriptionTrack?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         overlayEnabled = intent.getBooleanExtra("overlay", false)
@@ -104,6 +112,9 @@ class MainActivity : ComponentActivity() {
                         state = overlayState,
                         modifier = Modifier.align(Alignment.TopStart).padding(32.dp),
                     )
+                }
+                noticeTrack?.let {
+                    SyntheticVoiceNotice(it, Modifier.align(Alignment.TopEnd).padding(32.dp))
                 }
                 TransportBar(
                     playing = playing,
@@ -144,6 +155,8 @@ class MainActivity : ComponentActivity() {
             if (isFinishing || isDestroyed) return@runOnUiThread
             synth = prepared?.synth
             narration = prepared?.narration.orEmpty()
+            noticeTrack = prepared?.track
+            handler.postDelayed({ noticeTrack = null }, NOTICE_MS)
 
             if (prepared != null) {
                 val audioSpeaker = RenderedAudioSpeaker(::log)
@@ -325,5 +338,8 @@ class MainActivity : ComponentActivity() {
     private companion object {
         /** One tag for the whole timeline. `adb logcat -s Baton:V`. */
         const val TAG = "Baton"
+
+        /** How long the synthetic-voice notice stays on screen once playback starts. */
+        const val NOTICE_MS = 10_000L
     }
 }
