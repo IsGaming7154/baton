@@ -14,6 +14,8 @@ data class BuildRequest(
     val sourceId: String,
     /** Length of the content, which is what closes the final silence window. */
     val mediaDurationMs: Long,
+    /** The title's synthetic-dub disclosure, when its dialogue is a dub; see [DescriptionTrack.syntheticDub]. */
+    val syntheticDub: String? = null,
 ) {
     init {
         require(sourceId.isNotBlank()) { "sourceId must not be blank" }
@@ -159,6 +161,7 @@ class DescriptionTrackBuilder(
             gapMap = gaps,
             cues = cues,
             synthetic = true,
+            syntheticDub = request.syntheticDub,
         )
 
         assertRuntimeWillAdmit(track)

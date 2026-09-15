@@ -60,6 +60,12 @@ class DescriptionTrackBuilderTest : FunSpec({
             .build(Fixtures.request).track.locale shouldBe "en-US"
     }
 
+    test("a title's synthetic-dub sentence travels from the request into the track, and is absent by default") {
+        val dub = "The German dialogue is a synthetic dub voiced by Amazon Polly."
+        Fixtures.builder().build(Fixtures.request.copy(syntheticDub = dub)).track.syntheticDub shouldBe dub
+        track.syntheticDub shouldBe null
+    }
+
     test("a cue is authored for every window that could hold one") {
         track.cues.map { it.id } shouldContainExactly listOf(
             CueId("ad-0"),
