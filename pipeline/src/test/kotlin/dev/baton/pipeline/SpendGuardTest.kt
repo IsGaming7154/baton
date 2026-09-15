@@ -1,12 +1,15 @@
 package dev.baton.pipeline
 
+import dev.baton.director.DescriptionTrackJson
 import dev.baton.director.Gap
+import dev.baton.pipeline.mock.SimulatedSynthesis
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readText
@@ -72,6 +75,62 @@ class SpendGuardTest : FunSpec({
                 shouldThrow<SpendRefused> { SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND) }
             }
         }
+    }
+
+    test("a recorded-fixture run writes a report beside its track: every call counted and priced, nothing spent") {
+        // What the same build asks of Nova and Polly, counted outside any guard.
+        val recorder = RecordingDrafter(Fixtures.drafting())
+        val spoken = mutableListOf<String>()
+        val listening = object : Synthesis {
+            override fun synthesize(text: String, voice: VoiceSpec): RenderedAudio =
+                SimulatedSynthesis().synthesize(text, voice).also { spoken += text }
+        }
+        Fixtures.builder(drafting = recorder, synthesis = listening).build(Fixtures.request)
+
+        val dir = Files.createTempDirectory("baton-run")
+        val trackFile = dir.resolve("sintel-clip.track.json")
+        val ledger = dir.resolve("aws-spend.json")
+        buildGuarded(
+            Fixtures.request,
+            Fixtures.transcription(),
+            Fixtures.drafting(),
+            SimulatedSynthesis(),
+            trackFile,
+            spend = SpendConfig(ledgerPath = ledger),
+        )
+
+        DescriptionTrackJson.decode(trackFile.readText()) shouldBe Fixtures.build().track
+        val report = Json.decodeFromString(RunReport.serializer(), dir.resolve("sintel-clip.track.report.json").readText())
+
+        // The worst cases a live run would have been checked against, at HANDOFF.md §6's
+        // prices, for the 40 s fixture clip.
+        val novaCalls = recorder.asks.size
+        report.transcribe.calls shouldBe 1
+        report.transcribe.estimatedUsd shouldBe (40 * 0.0001 plusOrMinus 1e-12)
+        report.nova.calls shouldBe novaCalls
+        report.nova.estimatedUsd shouldBe (novaCalls * ((288 * 40 + 2_000) * 0.33 + 512 * 2.75) / 1e6 plusOrMinus 1e-12)
+        report.polly.calls shouldBe spoken.size
+        report.polly.estimatedUsd shouldBe (spoken.sumOf { it.length } * 16.0 / 1e6 plusOrMinus 1e-12)
+        listOf(report.transcribe, report.nova, report.polly).map { it.recordedUsd } shouldBe listOf(0.0, 0.0, 0.0)
+
+        report.caps shouldBe CapState(
+            perRunCapUsd = 2.0,
+            runUsd = 0.0,
+            runRemainingUsd = 2.0,
+            cumulativeCapUsd = 10.0,
+            cumulativeUsd = 0.0,
+            cumulativeRemainingUsd = 10.0,
+            novaCallsPerRunCap = 150,
+            novaCalls = novaCalls,
+        )
+        report.trackPath shouldBe trackFile.toAbsolutePath().toString()
+        report.novaModelId shouldBe null
+        report.novaPrice shouldBe AwsPrices.NOVA_2_LITE
+        report.voice shouldBe PipelineConfig.DEFAULT_VOICE
+        report.descriptionLocale shouldBe "en-US"
+        report.transcriptLocale shouldBe "en-US"
+        // A run that spent nothing never writes the ledger.
+        Files.exists(ledger) shouldBe false
     }
 })
 

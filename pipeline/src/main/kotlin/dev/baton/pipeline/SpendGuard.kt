@@ -1,5 +1,6 @@
 package dev.baton.pipeline
 
+import dev.baton.director.DescriptionTrackJson
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.nio.file.Files
@@ -118,12 +119,13 @@ class SpendGuard(private val config: SpendConfig, mediaDurationMs: Long) {
 
     val runUsd: Double get() = spend.values.sumOf { it.recordedUsd }
 
-    fun spendOn(service: Service): ServiceSpend = spend.getValue(service)
+    /** The dialogue's locale as transcription reported it, for the report; null until it has run. */
+    private var transcriptLocale: String? = null
 
     fun guarded(port: Transcription): Transcription = object : Transcription {
         override fun transcribe(media: MediaRef): Transcript {
             charge(Service.TRANSCRIBE, mediaSeconds * AwsPrices.TRANSCRIBE_BATCH_USD_PER_SECOND, port)
-            return port.transcribe(media)
+            return port.transcribe(media).also { transcriptLocale = it.locale }
         }
     }
 
@@ -150,6 +152,29 @@ class SpendGuard(private val config: SpendConfig, mediaDurationMs: Long) {
             return port.synthesize(text, voice)
         }
     }
+
+    /** What this run spent and where the caps stand, for the report beside [trackFile]. */
+    fun report(trackFile: Path, pipeline: PipelineConfig): RunReport = RunReport(
+        trackPath = trackFile.toAbsolutePath().toString(),
+        novaModelId = config.novaModelId,
+        novaPrice = config.novaPrice,
+        voice = pipeline.voice,
+        descriptionLocale = pipeline.descriptionLocale,
+        transcriptLocale = transcriptLocale,
+        transcribe = spend.getValue(Service.TRANSCRIBE),
+        nova = spend.getValue(Service.NOVA),
+        polly = spend.getValue(Service.POLLY),
+        caps = CapState(
+            perRunCapUsd = config.perRunCapUsd,
+            runUsd = runUsd,
+            runRemainingUsd = config.perRunCapUsd - runUsd,
+            cumulativeCapUsd = config.cumulativeCapUsd,
+            cumulativeUsd = cumulativeUsd,
+            cumulativeRemainingUsd = config.cumulativeCapUsd - cumulativeUsd,
+            novaCallsPerRunCap = config.novaCallsPerRunCap,
+            novaCalls = spend.getValue(Service.NOVA).calls,
+        ),
+    )
 
     private fun charge(service: Service, estimateUsd: Double, port: Any) {
         val before = spend.getValue(service)
@@ -199,6 +224,69 @@ class SpendGuard(private val config: SpendConfig, mediaDurationMs: Long) {
         Files.move(staging, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
     }
 }
+
+/**
+ * A run's report, written as JSON beside its track. `recordedUsd` is what went into the
+ * ledger: $0 for an [Unbilled] port, otherwise the estimate, since no live port reports
+ * billed usage yet.
+ */
+@Serializable
+data class RunReport(
+    val trackPath: String,
+    val novaModelId: String?,
+    val novaPrice: NovaPrice,
+    val voice: VoiceSpec,
+    val descriptionLocale: String,
+    val transcriptLocale: String?,
+    val transcribe: ServiceSpend,
+    val nova: ServiceSpend,
+    val polly: ServiceSpend,
+    val caps: CapState,
+)
+
+@Serializable
+data class CapState(
+    val perRunCapUsd: Double,
+    val runUsd: Double,
+    val runRemainingUsd: Double,
+    val cumulativeCapUsd: Double,
+    val cumulativeUsd: Double,
+    val cumulativeRemainingUsd: Double,
+    val novaCallsPerRunCap: Int,
+    val novaCalls: Int,
+)
+
+/**
+ * Build a track with every cloud port behind one [SpendGuard], write it to [trackFile], and
+ * write the run's report beside it as `<name>.report.json`. A refused call throws
+ * [SpendRefused] out of here before either file is written; the ledger already holds
+ * whatever was spent up to it.
+ */
+fun buildGuarded(
+    request: BuildRequest,
+    transcription: Transcription,
+    drafting: Drafting,
+    synthesis: Synthesis,
+    trackFile: Path,
+    config: PipelineConfig = PipelineConfig(),
+    spend: SpendConfig = SpendConfig(),
+): BuildResult {
+    val guard = SpendGuard(spend, request.mediaDurationMs)
+    val result = DescriptionTrackBuilder(
+        guard.guarded(transcription),
+        guard.guarded(drafting),
+        guard.guarded(synthesis),
+        config,
+    ).build(request)
+
+    Files.createDirectories(trackFile.toAbsolutePath().parent)
+    trackFile.writeText(DescriptionTrackJson.encode(result.track))
+    val reportFile = trackFile.resolveSibling(trackFile.fileName.toString().removeSuffix(".json") + ".report.json")
+    reportFile.writeText(reportJson.encodeToString(RunReport.serializer(), guard.report(trackFile, config)))
+    return result
+}
+
+private val reportJson = Json { prettyPrint = true }
 
 @Serializable
 private data class Ledger(val spentUsd: Double)

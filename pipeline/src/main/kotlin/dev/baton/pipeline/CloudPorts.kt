@@ -2,6 +2,7 @@ package dev.baton.pipeline
 
 import dev.baton.director.Gap
 import dev.baton.director.MeasuredDurationMs
+import kotlinx.serialization.Serializable
 
 /**
  * Where a piece of media lives. A local path while the pipeline runs against
@@ -116,6 +117,7 @@ interface Drafting {
  * service on the first paid call, or would label a 16 kHz buffer as something else and
  * mis-measure every duration, so it is refused here, before anything is spent.
  */
+@Serializable
 data class VoiceSpec(
     val voiceId: String,
     val engine: String,
