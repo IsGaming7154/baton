@@ -155,7 +155,7 @@ class DescriptionTrackBuilder(
         val track = DescriptionTrack(
             formatVersion = DescriptionTrack.CURRENT_FORMAT_VERSION,
             sourceId = request.sourceId,
-            locale = transcript.locale,
+            locale = config.descriptionLocale,
             gapMap = gaps,
             cues = cues,
             synthetic = true,

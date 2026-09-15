@@ -48,6 +48,18 @@ class DescriptionTrackBuilderTest : FunSpec({
         )
     }
 
+    test("the track's locale is the language of its descriptions, not of the dialogue around them") {
+        // The demo's dialogue is a German dub and its descriptions are English. The
+        // device picks the voice that speaks a track from this field, so a track
+        // stamped with the dialogue's locale reads English in a German voice.
+        val germanDialogue = object : Transcription {
+            override fun transcribe(media: MediaRef): Transcript =
+                Fixtures.transcription().transcribe(media).copy(locale = "de-DE")
+        }
+        DescriptionTrackBuilder(germanDialogue, Fixtures.drafting(), SimulatedSynthesis())
+            .build(Fixtures.request).track.locale shouldBe "en-US"
+    }
+
     test("a cue is authored for every window that could hold one") {
         track.cues.map { it.id } shouldContainExactly listOf(
             CueId("ad-0"),

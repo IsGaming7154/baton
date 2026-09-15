@@ -109,6 +109,15 @@ data class PipelineConfig(
 
     val voice: VoiceSpec = DEFAULT_VOICE,
 
+    /**
+     * BCP-47 tag of the language the descriptions are written and voiced in, and so the
+     * locale the track declares. The device picks the voice that speaks a track by it
+     * (`TrackPreparation.kt`). Not the dialogue's language: a German dub described in
+     * English is an English track, and the transcript's locale is transcription's business
+     * only. Has to name the language [voice] speaks.
+     */
+    val descriptionLocale: String = DEFAULT_DESCRIPTION_LOCALE,
+
     /** How many words of dialogue either side of a gap the drafter is shown. */
     val contextWords: Int = DEFAULT_CONTEXT_WORDS,
 ) {
@@ -123,6 +132,7 @@ data class PipelineConfig(
         require(variantShrinkFactor in 0.0..1.0) { "variantShrinkFactor must be in (0, 1], was $variantShrinkFactor" }
         require(overrunBackoff in 0.0..1.0) { "overrunBackoff must be in (0, 1], was $overrunBackoff" }
         require(contextWords >= 0) { "contextWords must be >= 0, was $contextWords" }
+        require(descriptionLocale.isNotBlank()) { "descriptionLocale must name a language" }
         require(variantSeparationMs > 0) {
             "variantSeparationMs must be > 0, was $variantSeparationMs; at zero two drafts of " +
                 "identical length are two variants, which is the thing it exists to refuse"
@@ -161,6 +171,8 @@ data class PipelineConfig(
         const val DEFAULT_VARIANT_SHRINK_FACTOR: Double = 0.65
         const val DEFAULT_OVERRUN_BACKOFF: Double = 0.85
         const val DEFAULT_CONTEXT_WORDS: Int = 12
+
+        const val DEFAULT_DESCRIPTION_LOCALE: String = "en-US"
 
         /** Polly's neural Joanna at 16 kHz, the highest rate Polly renders PCM at ([VoiceSpec]). */
         val DEFAULT_VOICE: VoiceSpec = VoiceSpec(voiceId = "Joanna", engine = "neural", sampleRateHz = 16_000)
