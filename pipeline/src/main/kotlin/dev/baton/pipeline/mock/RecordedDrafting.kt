@@ -3,6 +3,7 @@ package dev.baton.pipeline.mock
 import dev.baton.pipeline.Draft
 import dev.baton.pipeline.DraftRequest
 import dev.baton.pipeline.Drafting
+import dev.baton.pipeline.Unbilled
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -31,7 +32,7 @@ import kotlinx.serialization.json.Json
  * exists to prove works. A live drafter reads the target and does better; the
  * loop is what catches it when it does not.
  */
-class RecordedDrafting(draftsJson: String) : Drafting {
+class RecordedDrafting(draftsJson: String) : Drafting, Unbilled {
 
     private val bySlot: Map<Pair<Long, Int>, List<String>> =
         json.decodeFromString(RecordedDrafts.serializer(), draftsJson)

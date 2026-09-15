@@ -3,6 +3,7 @@ package dev.baton.pipeline.mock
 import dev.baton.pipeline.MediaRef
 import dev.baton.pipeline.Transcript
 import dev.baton.pipeline.Transcription
+import dev.baton.pipeline.Unbilled
 import dev.baton.pipeline.Word
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -23,7 +24,7 @@ class RecordedTranscription(
     private val responseJson: String,
     /** Used when the recorded job did not run language identification. */
     private val fallbackLocale: String = "en-US",
-) : Transcription {
+) : Transcription, Unbilled {
 
     override fun transcribe(media: MediaRef): Transcript = parse(responseJson, fallbackLocale)
 

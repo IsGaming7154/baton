@@ -2,6 +2,7 @@ package dev.baton.pipeline.mock
 
 import dev.baton.pipeline.RenderedAudio
 import dev.baton.pipeline.Synthesis
+import dev.baton.pipeline.Unbilled
 import dev.baton.pipeline.VoiceSpec
 
 /**
@@ -74,7 +75,7 @@ class SimulatedSynthesis(
     private val rate: SpeakingRate = SpeakingRate(),
     /** Where a real synthesizer would have stored this audio. */
     private val audioRefFor: (text: String) -> String? = { null },
-) : Synthesis {
+) : Synthesis, Unbilled {
 
     override fun synthesize(text: String, voice: VoiceSpec): RenderedAudio {
         val frameCount = rate.frameCountFor(text, voice.sampleRateHz)
