@@ -93,10 +93,16 @@ class RecordedPortsTest : FunSpec({
 
         test("the sample rate changes the frame count and leaves the duration alone") {
             val text = "The dragon lifts from the cliff face."
-            val at24k = synthesis.synthesize(text, voice)
-            val at16k = synthesis.synthesize(text, voice.copy(sampleRateHz = 16_000))
-            at16k.frameCount shouldNotBe at24k.frameCount
-            at16k.duration shouldBe at24k.duration
+            val atDefault = synthesis.synthesize(text, voice)
+            val at8k = synthesis.synthesize(text, voice.copy(sampleRateHz = 8_000))
+            at8k.frameCount shouldNotBe atDefault.frameCount
+            at8k.duration shouldBe atDefault.duration
+        }
+
+        test("Polly's PCM output is 16 kHz at most, so that is the default and any other rate is refused") {
+            PipelineConfig.DEFAULT_VOICE.sampleRateHz shouldBe 16_000
+            shouldThrow<IllegalArgumentException> { VoiceSpec("Joanna", "neural", 24_000) }
+            shouldThrow<IllegalArgumentException> { VoiceSpec("Joanna", "neural", 22_050) }
         }
 
         test("the rate model is a parameter, so a slower voice produces longer audio") {

@@ -108,14 +108,33 @@ interface Drafting {
     fun draft(request: DraftRequest): Draft?
 }
 
-/** Which voice to synthesize with. Polly's voice id, engine and output rate. */
+/**
+ * Which voice to synthesize with. Polly's voice id, engine and output rate.
+ *
+ * The rate is a PCM rate, because the pipeline measures PCM ([RenderedAudio.ofPcm16Mono]),
+ * and Polly offers PCM at two rates only. A rate outside them would be refused by the
+ * service on the first paid call, or would label a 16 kHz buffer as something else and
+ * mis-measure every duration, so it is refused here, before anything is spent.
+ */
 data class VoiceSpec(
     val voiceId: String,
     val engine: String,
     val sampleRateHz: Int,
 ) {
     init {
-        require(sampleRateHz > 0) { "sampleRateHz must be > 0, was $sampleRateHz" }
+        require(sampleRateHz in POLLY_PCM_SAMPLE_RATES_HZ) {
+            "Polly renders PCM at $POLLY_PCM_SAMPLE_RATES_HZ Hz only, was asked for $sampleRateHz"
+        }
+    }
+
+    companion object {
+        /**
+         * botocore's Polly model, `SynthesizeSpeechInput.SampleRate`: "Valid values for pcm
+         * are "8000" and "16000"" (AWS CLI 2.36.44,
+         * `awscli/botocore/data/polly/2016-06-10/service-2.json`). Matches the real neural
+         * renders of 2026-09-12 (HANDOFF.md §6).
+         */
+        val POLLY_PCM_SAMPLE_RATES_HZ: Set<Int> = setOf(8_000, 16_000)
     }
 }
 

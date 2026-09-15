@@ -162,7 +162,7 @@ data class PipelineConfig(
         const val DEFAULT_OVERRUN_BACKOFF: Double = 0.85
         const val DEFAULT_CONTEXT_WORDS: Int = 12
 
-        /** Polly's neural Joanna at 24 kHz, which is what the live slice will ask for. */
-        val DEFAULT_VOICE: VoiceSpec = VoiceSpec(voiceId = "Joanna", engine = "neural", sampleRateHz = 24_000)
+        /** Polly's neural Joanna at 16 kHz, the highest rate Polly renders PCM at ([VoiceSpec]). */
+        val DEFAULT_VOICE: VoiceSpec = VoiceSpec(voiceId = "Joanna", engine = "neural", sampleRateHz = 16_000)
     }
 }
