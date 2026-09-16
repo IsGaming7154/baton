@@ -514,4 +514,27 @@ Two further costs. VoiceView could not be enabled for a test over `adb`: no inst
 
 ---
 
+## 20. On an AWS Free plan account, Amazon Transcribe refuses with "needs a subscription" and never says the plan is the reason
+
+**Severity:** medium — the live transcription slice cannot run on the account the project was built on
+**Area:** AWS account plans / Amazon Transcribe (us-east-1), AWS SDK for Java v2 2.54.19
+
+**What was attempted.** One live Transcribe job on the 88.6 s demo clip, through `:pipeline:transcribeSmoke` (issue #11, slice S2): upload to S3, `StartTranscriptionJob` with `de-DE`, poll, read the output back.
+
+**What happened.** The S3 upload succeeded and `StartTranscriptionJob` did not:
+
+```
+software.amazon.awssdk.services.transcribe.model.TranscribeException: The AWS Access Key Id needs a subscription for the service (Service: Transcribe, Status Code: 400, ...)
+```
+
+The same account's Amazon Polly calls succeed (S1's smoke call, billed 56 characters). Asking the account what it is, through the Free Tier API, answers `"accountPlanType": "FREE"`, `"accountPlanStatus": "ACTIVE"`. AWS's Free Tier FAQ (Q11) says a free account plan "is limited from accessing a subset of AWS services", and that upgrading to a paid plan removes the limitation, but the FAQ names no services and the error names no plan. Connecting the two took a separate IAM grant (`freetier:GetAccountPlanState`) just to read the plan.
+
+**Sources.** The smoke run's console output (above); `aws freetier get-account-plan-state` (2026-09-16); `https://aws.amazon.com/free/free-tier-faqs/` Q9 and Q11; `https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html`. Established: the error, the plan type, Polly working on the same account. Inferred: that the plan is what blocks Transcribe — the FAQ is consistent with it but does not list Transcribe.
+
+**Workaround.** None taken: the owner chose not to upgrade the account. The adapter is built and tested against fakes; `:pipeline` keeps building from Transcribe-shaped recorded fixtures.
+
+**Ask.** An error that says what it means — "this service is not available on the Free account plan" — and a published list of which services a free plan excludes. A hackathon on AWS will put a lot of new accounts on exactly this plan.
+
+---
+
 *Entries are appended as they are encountered. This log is a deliverable, not a postscript.*

@@ -14,7 +14,7 @@ Fire OS has no hierarchy of auditory focus. There is no arbitration layer, and n
 
 It also writes the description. An offline pipeline transcribes the audio, derives an authoritative map of dialogue and silence from the word timings, drafts a description for each silence, synthesises it, measures the resulting audio, and shortens anything that will not fit. Every cue reaches the runtime with a duration that was measured off real bytes rather than estimated from a character count.
 
-The case for the platform API is in [`FRICTION_LOG.md`](FRICTION_LOG.md) entry 1. The other eighteen entries are what the platform cost on the way there.
+The case for the platform API is in [`FRICTION_LOG.md`](FRICTION_LOG.md) entry 1. The other nineteen entries are what the platform cost on the way there.
 
 ---
 
@@ -35,7 +35,7 @@ The tracer has been run on a Fire TV Stick, and the device measurements quoted t
 
 **Designed, specified, not built**
 
-- The live AWS pipeline. `:pipeline`'s ports are defined against Transcribe, Bedrock Nova and Polly, and its fixtures are stored in those services' own response shapes so the parsers are the real ones. Polly and Transcribe have live adapters so far (`PollySynthesis` and `TranscribeTranscription`, on the AWS SDK for Java v2): they are tested against fake clients, and their manual smoke calls (`gradlew :pipeline:pollySmoke`, `gradlew :pipeline:transcribeSmoke`) have not yet been run. Nova has no SDK on the classpath, and nothing in the test suite makes a network call. This is deliberate: the loop that has to be right is the one that runs for free.
+- The live AWS pipeline. `:pipeline`'s ports are defined against Transcribe, Bedrock Nova and Polly, and its fixtures are stored in those services' own response shapes so the parsers are the real ones. Polly and Transcribe have live adapters so far (`PollySynthesis` and `TranscribeTranscription`, on the AWS SDK for Java v2): they are tested against fake clients. Polly's manual smoke call (`gradlew :pipeline:pollySmoke`) has been run once, billed 56 characters, exactly the estimate; Transcribe's (`gradlew :pipeline:transcribeSmoke`) was refused by AWS on this account's Free plan (friction-log entry 20), so the live transcription path is unproven. Nova has no SDK on the classpath, and nothing in the test suite makes a network call. This is deliberate: the loop that has to be right is the one that runs for free.
 - Reactive speech beyond menu narration. The director arbitrates `VQA_ANSWER` today, and its preemption behaviour is tested, but nothing in the app raises one yet. There is no question ring and no visual question answering.
 - Spoken subtitles from a *live* subtitle track. The kind exists and outranks description in the policy, and the app now parses and speaks a bundled subtitle sidecar (`SubtitleFile.kt`, `TrackPreparation.kt`) the same way it speaks the bundled description track; what remains unbuilt is deriving that subtitle track from the live pipeline, rather than authoring it in advance.
 - The rest of the accessible UI: description frequency and emphasis settings, and a description speaking rate independent of VoiceView's. Specified in [`PRD.md`](PRD.md). The screen curtain and the access-services row are built and were checked on the Stick from its log and screenshots; neither has yet been run with VoiceView on.
@@ -341,7 +341,7 @@ Open, and not hidden:
 
 ## Documents
 
-- **[`FRICTION_LOG.md`](FRICTION_LOG.md)** — nineteen entries on where Fire OS, the SDKs, the documentation and the Windows toolchain got in the way. Kept from the first commit rather than reconstructed at the end. Entries 10, 11 and 12 are worked out from AOSP and AndroidX source, with entry 12's mix-period numbers measured on the device.
+- **[`FRICTION_LOG.md`](FRICTION_LOG.md)** — twenty entries on where Fire OS, the SDKs, the documentation and the Windows toolchain got in the way. Kept from the first commit rather than reconstructed at the end. Entries 10, 11 and 12 are worked out from AOSP and AndroidX source, with entry 12's mix-period numbers measured on the device.
 - **[`PRD.md`](PRD.md)** — the full product definition: fifty user stories, the priority model, the pipeline design, and an explicit out-of-scope list.
 
 ---
