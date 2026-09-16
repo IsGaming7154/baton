@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.tv.material3.Surface
 import dev.baton.director.AudioDirector
+import dev.baton.director.DescriptionLength
 import dev.baton.director.DescriptionTrack
 import dev.baton.director.DirectorConfig
 import dev.baton.director.ReactiveRequest
@@ -86,17 +87,18 @@ class MainActivity : ComponentActivity() {
     private var noticeTrack by mutableStateOf<DescriptionTrack?>(null)
 
     /**
-     * Which access services are on (issue #7). Runtime only, and it has to be said
-     * out loud: issue #13 is what persists the per-title description setting, and
-     * until it lands none of this survives the activity. That is also what makes
-     * the "suppress does not alter the persisted setting" criterion trivially true
-     * here -- there is no persisted setting to alter, and suppress writes nothing
-     * but its own flag either way.
+     * Which access services are on (issues #7 and #13). Only
+     * [AccessService.DESCRIPTION] outlives the activity: it is read from and written
+     * to [TitleDescriptions] under [titleId]. Everything else is session-only,
+     * [AccessService.DESCRIPTION_LENGTH] included. Suppress writes nothing but its
+     * own flag, so it mutes a title without touching the stored setting.
      *
-     * The three service toggles start from the same launch extras preparation reads,
-     * so a run started with `--ez descriptions false` shows the row saying so
-     * rather than claiming a voice that was never rendered. [AccessService.SUPPRESS]
-     * and [AccessService.SCREEN_CURTAIN] start off; both are moments, not settings.
+     * Description starts off and takes the stored value once preparation names the
+     * title. Spoken subtitles start from the same launch extra preparation reads,
+     * and a run started with `--ez descriptions false` keeps Description off
+     * whatever is stored, so the row never claims a voice that was never rendered.
+     * [AccessService.SUPPRESS] and [AccessService.SCREEN_CURTAIN] start off; both
+     * are moments, not settings.
      *
      * ponytail: a kind the extra disabled is unrendered, so switching it back on in
      * the row does nothing for the rest of the session. That only reaches a
@@ -106,11 +108,13 @@ class MainActivity : ComponentActivity() {
      */
     private var services by mutableStateOf(emptySet<AccessService>())
 
+    /** The prepared track's [DescriptionTrack.sourceId], which keys [TitleDescriptions]. Null until preparation returns one. */
+    private var titleId: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         overlayEnabled = intent.getBooleanExtra("overlay", false)
         services = buildSet {
-            if (intent.getBooleanExtra("descriptions", true)) add(AccessService.DESCRIPTION)
             if (intent.getBooleanExtra("spokenSubtitles", true)) add(AccessService.SPOKEN_SUBTITLES)
             add(AccessService.CAPTIONS)
         }
@@ -190,6 +194,14 @@ class MainActivity : ComponentActivity() {
             handler.postDelayed({ noticeTrack = null }, NOTICE_MS)
 
             if (prepared != null) {
+                titleId = prepared.track.sourceId
+                // Stored off still renders: preparation has already rendered every
+                // description, and the stored state only silences them (silencedKinds).
+                // Unrendered, turning Description on mid-film would have nothing to play,
+                // because nothing is rendered once the director is running.
+                if (intent.getBooleanExtra("descriptions", true) && TitleDescriptions.isOn(this, prepared.track.sourceId)) {
+                    services = services + AccessService.DESCRIPTION
+                }
                 val audioSpeaker = RenderedAudioSpeaker(::log)
                 speaker = audioSpeaker
                 val running = Tracer(
@@ -227,6 +239,7 @@ class MainActivity : ComponentActivity() {
                 // Whatever the row already says, including a press made while
                 // preparation was still running and had no director to tell.
                 running.silencedKinds = silencedKinds()
+                running.descriptionLength = descriptionLength()
                 player.onSeek(running::onSeek)
                 running.start()
             }
@@ -346,18 +359,35 @@ class MainActivity : ComponentActivity() {
      * whole effect is the composable `MainActivity` draws from [services], so there
      * is nothing here for it to do, and in particular nothing that touches the
      * player.
+     *
+     * [AccessService.DESCRIPTION] is refused until preparation has named the title:
+     * there is no key to store it under, and the stored value has not been read yet.
+     * It is silent either way -- the row's phrases are not rendered before then.
      */
     private fun toggle(service: AccessService) {
+        if (service == AccessService.DESCRIPTION && titleId == null) {
+            log("access service refused service=$service reason=not-prepared")
+            return
+        }
         val on = service !in services
         services = if (on) services + service else services - service
         when (service) {
             AccessService.CAPTIONS -> player.setCaptionsEnabled(on)
             AccessService.SCREEN_CURTAIN -> Unit
+            AccessService.DESCRIPTION_LENGTH -> tracer?.descriptionLength = descriptionLength()
+            AccessService.DESCRIPTION -> {
+                titleId?.let { TitleDescriptions.set(this, it, on) }
+                tracer?.silencedKinds = silencedKinds()
+            }
             else -> tracer?.silencedKinds = silencedKinds()
         }
-        log("access service=$service on=$on silenced=${silencedKinds()}")
-        announce(TransportNarration.toggle(service.label, on))
+        log("access service=$service on=$on silenced=${silencedKinds()} length=${descriptionLength()}")
+        announce(TransportNarration.toggle(service, on))
     }
+
+    /** The length control, resolved into what the director is told. In [services] means Short. */
+    private fun descriptionLength(): DescriptionLength =
+        if (AccessService.DESCRIPTION_LENGTH in services) DescriptionLength.SHORT else DescriptionLength.LONG
 
     /**
      * The two independent switches over descriptions, resolved into the one thing

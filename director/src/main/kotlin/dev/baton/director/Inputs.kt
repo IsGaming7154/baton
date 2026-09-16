@@ -87,6 +87,16 @@ enum class Playback {
 }
 
 /**
+ * Which of a description cue's variants the viewer will accept.
+ *
+ * [LONG] is the longest variant that fits the room, which is what the director has
+ * always done. [SHORT] is the shortest variant, and only if it fits -- never a
+ * longer one because there happens to be room for it. Spoken subtitles are not
+ * affected: a subtitle's variants are the dialogue, not a matter of taste.
+ */
+enum class DescriptionLength { SHORT, LONG }
+
+/**
  * Something discrete that happened since the previous
  * [AudioDirector.advance]. Edge-triggered, and ordered: the events in one
  * advance are applied in the order they occurred.
@@ -157,6 +167,13 @@ data class DirectorInputs(
      * floor is never taken.
      */
     val silencedKinds: Set<UtteranceKind.Scheduled> = emptySet(),
+    /**
+     * How long the viewer wants each description to be (issue #13). Level state for
+     * the reason [silencedKinds] is, and read at the same moment: when a cue is
+     * assessed. An utterance already speaking keeps the variant it started with, so
+     * a change is heard from the next cue on and never cuts a sentence short.
+     */
+    val descriptionLength: DescriptionLength = DescriptionLength.LONG,
 ) {
     init {
         require(positionMs >= 0) { "positionMs must be >= 0, was $positionMs" }

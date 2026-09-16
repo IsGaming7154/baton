@@ -121,19 +121,17 @@ object TransportNarration {
     /** What the viewer is told on return to the app, and after toggling playback. */
     fun state(playing: Boolean): String = if (playing) "Playing" else "Paused"
 
-    fun onOff(on: Boolean): String = if (on) "on" else "off"
-
     /**
      * What an access-services toggle says, on focus and again when it is pressed:
      * [focused]'s label-then-role, then the state it is now in -- "Description,
-     * button, on".
+     * button, on", or "Description length, button, short".
      *
      * One sentence rather than two, because two would have to be two utterances
      * and the second would preempt the first: the director's rule 2 is that the
      * newest reactive request takes the floor (`AudioDirector.advance`), so a
      * viewer moving along the row would hear five labels and no states.
      */
-    fun toggle(label: String, on: Boolean): String = "${focused(label)}, ${onOff(on)}"
+    fun toggle(service: AccessService, on: Boolean): String = "${focused(service.label)}, ${service.state(on)}"
 
     /**
      * `RenderedAudioSpeaker` refuses an utterance with no `audioRef`, so a phrase
@@ -149,7 +147,7 @@ object TransportNarration {
             state(playing = true) + state(playing = false)
 
     val AFTER_START: List<String> =
-        AccessService.entries.flatMap { listOf(toggle(it.label, on = true), toggle(it.label, on = false)) }
+        AccessService.entries.flatMap { listOf(toggle(it, on = true), toggle(it, on = false)) }
 
     val PHRASES: List<String> = AT_START + AFTER_START
 }

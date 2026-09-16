@@ -1,5 +1,6 @@
 package dev.baton.tv
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,18 +28,48 @@ import androidx.tv.material3.Text
  * `MainActivity.toggle`.
  *
  * [SUPPRESS] is not [DESCRIPTION] with a different name. The first is a moment --
- * "not in front of these people, right now" -- and the second is the setting that
- * issue #13 will persist per title. They are two independent facts with one
- * derived consequence (`MainActivity.silencedKinds`), which is exactly the shape
- * the acceptance criterion "suppress does not alter the persisted per-title
- * setting" asks for: neither button can write the other's state.
+ * "not in front of these people, right now" -- and the second is the setting
+ * [TitleDescriptions] persists per title (issue #13). They are two independent facts
+ * with one derived consequence (`MainActivity.silencedKinds`), which is exactly the
+ * shape the acceptance criteria "suppress does not alter the persisted per-title
+ * setting" and "muted without disabling the feature" ask for: neither button can
+ * write the other's state, and only [DESCRIPTION] reaches storage.
+ *
+ * [DESCRIPTION_LENGTH] is two-state too, with Short and Long for its words instead
+ * of on and off: in the set means Short.
  */
-enum class AccessService(val label: String) {
+enum class AccessService(val label: String, private val onWord: String = "on", private val offWord: String = "off") {
     DESCRIPTION("Description"),
+    DESCRIPTION_LENGTH("Description length", onWord = "short", offWord = "long"),
     SPOKEN_SUBTITLES("Spoken subtitles"),
     CAPTIONS("Captions"),
     SUPPRESS("Suppress description"),
     SCREEN_CURTAIN("Screen curtain"),
+    ;
+
+    /** The state word the control says and shows: "on"/"off", or "short"/"long". */
+    fun state(on: Boolean): String = if (on) onWord else offWord
+}
+
+/**
+ * Whether description is on, per title (issue #13), in `SharedPreferences` so it
+ * survives a restart. Keyed by [dev.baton.director.DescriptionTrack.sourceId]: it is
+ * the one identity a track carries for the source it was built for, and it is what
+ * the pipeline was told the title is (`BuildRequest.sourceId`).
+ *
+ * A title never stored is off. That is the fix for the Fire TV defect #13 cites,
+ * where description switched on once stays on for every title: here there is no
+ * global switch to stay on, only this title's.
+ */
+object TitleDescriptions {
+    private const val PREFS = "title_descriptions"
+
+    fun isOn(context: Context, titleId: String): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(titleId, false)
+
+    fun set(context: Context, titleId: String, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(titleId, on).apply()
+    }
 }
 
 /**
@@ -85,7 +116,7 @@ private fun AccessToggle(
     onToggle: (AccessService) -> Unit,
     announce: (String) -> Unit,
 ) {
-    val spoken = TransportNarration.toggle(service.label, on)
+    val spoken = TransportNarration.toggle(service, on)
     Button(
         onClick = { onToggle(service) },
         modifier = Modifier
@@ -95,7 +126,7 @@ private fun AccessToggle(
             }
             .onFocusChanged { if (it.isFocused) announce(spoken) },
     ) {
-        Text("${service.label}: ${TransportNarration.onOff(on)}")
+        Text("${service.label}: ${service.state(on)}")
     }
 }
 

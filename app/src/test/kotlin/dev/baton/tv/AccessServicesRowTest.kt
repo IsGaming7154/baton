@@ -24,6 +24,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
@@ -93,7 +94,7 @@ class AccessServicesRowTest {
         listOf(TransportNarration.REWIND, TransportNarration.PLAY, TransportNarration.FAST_FORWARD)
 
     private fun togglePhrases(on: Set<AccessService>): List<String> =
-        AccessService.entries.map { TransportNarration.toggle(it.label, it in on) }
+        AccessService.entries.map { TransportNarration.toggle(it, it in on) }
 
     @Test
     fun oneDpadPressDownFromTheTransportBarReachesTheRowAndOnePressBackLeavesIt() {
@@ -185,9 +186,59 @@ class AccessServicesRowTest {
     @Test
     fun everyStateOfEveryControlIsAPreparedPhrase() {
         val required = AccessService.entries.flatMap {
-            listOf(TransportNarration.toggle(it.label, on = true), TransportNarration.toggle(it.label, on = false))
+            listOf(TransportNarration.toggle(it, on = true), TransportNarration.toggle(it, on = false))
         }
         (required - TransportNarration.PHRASES.toSet()).shouldBeEmpty()
+    }
+
+    /**
+     * The length control says its value rather than on or off, on focus and after a
+     * press, and both values are rendered with the rest of the row. The press itself
+     * is announced by `MainActivity.toggle`, with the same phrase.
+     */
+    @Test
+    fun theLengthControlSaysShortOrLong() {
+        showShell(initial = emptySet())
+
+        compose.onNodeWithContentDescription("Description length, button, long")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.runOnIdle { heard.last() shouldBe "Description length, button, long" }
+
+        press("Description length, button, long", NativeKeyEvent.KEYCODE_DPAD_CENTER)
+
+        toggled shouldContainExactly listOf(AccessService.DESCRIPTION_LENGTH)
+        compose.onNodeWithContentDescription("Description length, button, short").assertIsFocused()
+        TransportNarration.AFTER_START shouldContain "Description length, button, short"
+        TransportNarration.AFTER_START shouldContain "Description length, button, long"
+    }
+
+    /** A title with nothing stored starts with Description off, and the row says so. */
+    @Test
+    fun descriptionStartsFromTheTitlesStoredStateAndDefaultsOff() {
+        val context = RuntimeEnvironment.getApplication()
+        val initial = if (TitleDescriptions.isOn(context, "title-a")) setOf(AccessService.DESCRIPTION) else emptySet()
+        showShell(initial = initial)
+
+        compose.onNodeWithContentDescription("Description, button, off")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.runOnIdle { heard.last() shouldBe "Description, button, off" }
+    }
+
+    /** On for one title is on for that title only, and read back from storage rather than memory. */
+    @Test
+    fun twoTitlesDoNotShareDescriptionState() {
+        val context = RuntimeEnvironment.getApplication()
+
+        TitleDescriptions.set(context, "title-a", on = true)
+
+        TitleDescriptions.isOn(context, "title-a") shouldBe true
+        TitleDescriptions.isOn(context, "title-b") shouldBe false
+
+        TitleDescriptions.set(context, "title-b", on = true)
+        TitleDescriptions.set(context, "title-a", on = false)
+
+        TitleDescriptions.isOn(context, "title-a") shouldBe false
+        TitleDescriptions.isOn(context, "title-b") shouldBe true
     }
 
     private companion object {

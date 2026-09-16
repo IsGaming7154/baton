@@ -494,7 +494,7 @@ class AudioDirector(
         // carrying a withdrawal has no room left to name an utterance -- so this
         // is where the two agree rather than a second rule.
         val drops = if (inputs.playback == Playback.PLAYING && !timelineJumped && withdrawal == null) {
-            arbitrateScheduled(nowMs, inputs.positionMs, inputs.silencedKinds)
+            arbitrateScheduled(nowMs, inputs.positionMs, inputs.silencedKinds, inputs.descriptionLength)
         } else {
             emptyList()
         }
@@ -714,6 +714,7 @@ class AudioDirector(
         nowMs: Long,
         positionMs: Long,
         silenced: Set<UtteranceKind.Scheduled>,
+        length: DescriptionLength,
     ): List<DroppedCue> {
         var drops: MutableList<DroppedCue>? = null
         var best: Candidate? = null
@@ -734,7 +735,7 @@ class AudioDirector(
                 resolved += cue.id
                 continue
             }
-            when (val assessment = assess(cue, positionMs)) {
+            when (val assessment = assess(cue, positionMs, length)) {
                 is Assessment.Drop -> {
                     resolved += cue.id
                     val list = drops ?: mutableListOf<DroppedCue>().also { drops = it }
@@ -825,7 +826,7 @@ class AudioDirector(
      * not exact, and two sentences run together with no air between them are one
      * long sentence delivered by a machine.
      */
-    private fun assess(cue: Cue, positionMs: Long): Assessment {
+    private fun assess(cue: Cue, positionMs: Long, length: DescriptionLength): Assessment {
         if (cue.variants.isEmpty()) return Assessment.Drop(DropReason.NoVariants)
 
         val windowEndMs = track.silence.windowEndAt(cue.startMs)
@@ -840,7 +841,13 @@ class AudioDirector(
             cue.variants.indexOfFirst { it.measuredDuration.millis + config.guardMs <= availableMs }
         }
 
-        if (variantIndex >= 0) return Assessment.Fits(variantIndex, windowEndMs, roomEndMs)
+        if (variantIndex >= 0) {
+            // Short asks for the last variant. If any variant fits, the last one does,
+            // since it is the shortest -- so the fit is settled above and only the choice
+            // changes here, and a cue is dropped under Short exactly when it is under Long.
+            val short = length == DescriptionLength.SHORT && cue.kind == UtteranceKind.Scheduled.AUDIO_DESCRIPTION
+            return Assessment.Fits(if (short) cue.variants.lastIndex else variantIndex, windowEndMs, roomEndMs)
+        }
 
         val booking = track.rooms.bookingThatEndsRoomOf(cue.id)
         return Assessment.Drop(

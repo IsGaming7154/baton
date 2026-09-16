@@ -5,6 +5,7 @@ import android.os.Looper
 import android.os.SystemClock
 import dev.baton.director.AudioDirector
 import dev.baton.director.ContentDuck
+import dev.baton.director.DescriptionLength
 import dev.baton.director.Directive
 import dev.baton.director.DirectorInputs
 import dev.baton.director.InputEvent
@@ -71,6 +72,9 @@ class Tracer(
      */
     var silencedKinds: Set<UtteranceKind.Scheduled> = emptySet()
 
+    /** The row's description length, handed over the same way as [silencedKinds]; see [DirectorInputs.descriptionLength]. */
+    var descriptionLength: DescriptionLength = DescriptionLength.LONG
+
     private var speaking: Speaking.Utterance? = null
     private var duck: ContentDuck = ContentDuck.Unity
     private var running = false
@@ -133,6 +137,7 @@ class Tracer(
                 events = events,
                 programmeLufs = programmeLufs,
                 silencedKinds = silencedKinds,
+                descriptionLength = descriptionLength,
             ),
         )
 

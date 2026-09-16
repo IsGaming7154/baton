@@ -82,6 +82,9 @@ class Session(
     /** The access-services row's switches, as the app would hold them. Level state; set it and tick. */
     var silencedKinds: Set<UtteranceKind.Scheduled> = emptySet()
 
+    /** The row's description length, as the app would hold it. Level state; set it and tick. */
+    var descriptionLength: DescriptionLength = DescriptionLength.LONG
+
     val history: MutableList<Directive> = mutableListOf()
 
     /** Advance both clocks by [stepMs] (the content only if it is playing) and tick. */
@@ -137,7 +140,13 @@ class Session(
     private fun advance(events: List<InputEvent> = emptyList()): Directive {
         val directive = director.advance(
             nowMs,
-            DirectorInputs(positionMs, playback, speakerReport() + events, silencedKinds = silencedKinds),
+            DirectorInputs(
+                positionMs,
+                playback,
+                speakerReport() + events,
+                silencedKinds = silencedKinds,
+                descriptionLength = descriptionLength,
+            ),
         )
         speaking = directive.speaking as? Speaking.Utterance
         history += directive
