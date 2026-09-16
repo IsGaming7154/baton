@@ -32,6 +32,13 @@ dependencies {
         // ClasspathSdkHttpServiceProvider).
         exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
     }
+    // The same for Transcribe and S3: only their sync clients are used.
+    implementation("software.amazon.awssdk:transcribe:2.54.19") {
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+    }
+    implementation("software.amazon.awssdk:s3:2.54.19") {
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+    }
 
     testImplementation("io.kotest:kotest-runner-junit5:5.9.1")
 }
@@ -42,6 +49,16 @@ tasks.register<JavaExec>("pollySmoke") {
     description = "Makes ONE paid Amazon Polly call through the spend guard and writes it as a WAV."
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("dev.baton.pipeline.live.PollySmokeKt")
+}
+
+// One live Transcribe job, priced by the spend guard at AwsPrices.TRANSCRIBE_BATCH_USD_PER_SECOND
+// (89 s of demo clip: $0.0089), into the real ledger. The bucket must
+// already exist in us-east-1. Never wired into build or test:
+//   gradlew :pipeline:transcribeSmoke --args="<media> <bucket> <out.json> <duration ms>"
+tasks.register<JavaExec>("transcribeSmoke") {
+    description = "Runs ONE paid Amazon Transcribe job through the spend guard and writes its raw output JSON."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.baton.pipeline.live.TranscribeSmokeKt")
 }
 
 tasks.withType<Test>().configureEach {
