@@ -52,8 +52,12 @@ class ShellNarrationTest {
     fun everyFocusableNodeExposesNarrationTextAndARole() {
         showTransportBar()
 
+        // The three transport buttons, plus the access-services row the bar now
+        // carries one press below them (issue #7). The row's own tree is asserted
+        // in AccessServicesRowTest; what is checked here is that adding it did not
+        // put an unlabelled or roleless node in the shell.
         val focusable = compose.onAllNodes(isFocusable()).fetchSemanticsNodes()
-        focusable.size shouldBe 3
+        focusable.size shouldBe 3 + AccessService.entries.size
         for (node in focusable) {
             node.config.getOrElseNullable(SemanticsProperties.ContentDescription) { null }
                 .orEmpty().joinToString(" ").shouldNotBeBlank()

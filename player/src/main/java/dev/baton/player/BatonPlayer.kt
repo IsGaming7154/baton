@@ -145,6 +145,28 @@ class BatonPlayer(context: Context, log: (String) -> Unit = {}) {
         exoPlayer.playWhenReady = true
     }
 
+    /**
+     * The captions toggle in the access-services row (issue #7): the on-screen
+     * subtitles, which are a different thing from the spoken ones.
+     *
+     * Disabling the track type rather than hiding `PlayerView`'s subtitle view,
+     * because the two are not the same claim: with the type disabled the selector
+     * stops choosing a text track at all
+     * (`TrackSelectionParameters.Builder.setTrackTypeDisabled(int, boolean)`,
+     * media3-common 1.4.1), so no cue is decoded and there is nothing left that
+     * could reappear on the next track reselection. Hiding the view would leave a
+     * selected track drawing into a hidden surface.
+     *
+     * Nothing here touches playback: track selection does not stop the audio
+     * renderer.
+     */
+    fun setCaptionsEnabled(enabled: Boolean) {
+        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+            .buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !enabled)
+            .build()
+    }
+
     /** Notifies [onSeek] whenever playback jumps, which is what the director rebaselines on. */
     fun onSeek(onSeek: () -> Unit) {
         exoPlayer.addListener(object : Player.Listener {

@@ -113,14 +113,15 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
-    // ShellNarrationTest and SyntheticVoiceNoticeTest launch the ComponentActivity
-    // that ui-test-manifest declares, and ui-test-manifest is debug-only, so the
+    // The Robolectric composition-tree tests launch the ComponentActivity that
+    // ui-test-manifest declares, and ui-test-manifest is debug-only, so the
     // release unit-test variant has no activity to launch. They run under
     // testDebugUnitTest.
     if (name == "testReleaseUnitTest") {
         filter {
             excludeTestsMatching("dev.baton.tv.ShellNarrationTest")
             excludeTestsMatching("dev.baton.tv.SyntheticVoiceNoticeTest")
+            excludeTestsMatching("dev.baton.tv.AccessServicesRowTest")
         }
     }
 }

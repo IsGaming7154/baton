@@ -85,9 +85,35 @@ class MainActivity : ComponentActivity() {
      */
     private var noticeTrack by mutableStateOf<DescriptionTrack?>(null)
 
+    /**
+     * Which access services are on (issue #7). Runtime only, and it has to be said
+     * out loud: issue #13 is what persists the per-title description setting, and
+     * until it lands none of this survives the activity. That is also what makes
+     * the "suppress does not alter the persisted setting" criterion trivially true
+     * here -- there is no persisted setting to alter, and suppress writes nothing
+     * but its own flag either way.
+     *
+     * The three service toggles start from the same launch extras preparation reads,
+     * so a run started with `--ez descriptions false` shows the row saying so
+     * rather than claiming a voice that was never rendered. [AccessService.SUPPRESS]
+     * and [AccessService.SCREEN_CURTAIN] start off; both are moments, not settings.
+     *
+     * ponytail: a kind the extra disabled is unrendered, so switching it back on in
+     * the row does nothing for the rest of the session. That only reaches a
+     * listening test -- the extras default to on and the product path never passes
+     * them -- and closing it means rendering both kinds always, which is the cost
+     * `TrackPreparation`'s toggle exists to avoid.
+     */
+    private var services by mutableStateOf(emptySet<AccessService>())
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         overlayEnabled = intent.getBooleanExtra("overlay", false)
+        services = buildSet {
+            if (intent.getBooleanExtra("descriptions", true)) add(AccessService.DESCRIPTION)
+            if (intent.getBooleanExtra("spokenSubtitles", true)) add(AccessService.SPOKEN_SUBTITLES)
+            add(AccessService.CAPTIONS)
+        }
 
         player = BatonPlayer(this, ::log)
         // The second URI is the clip's English SubRip sidecar.
@@ -123,7 +149,12 @@ class MainActivity : ComponentActivity() {
                     onFastForward = { if (transportReady("fast-forward")) player.exoPlayer.seekForward() },
                     announce = ::announce,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp),
+                    services = services,
+                    onToggleService = ::toggle,
                 )
+                // Last, so it covers the picture, the subtitles, the notice and the
+                // controls. Nothing on this path reaches the player: see ScreenCurtain.
+                if (AccessService.SCREEN_CURTAIN in services) ScreenCurtain()
             }
         }
 
@@ -193,6 +224,9 @@ class MainActivity : ComponentActivity() {
                     },
                 )
                 tracer = running
+                // Whatever the row already says, including a press made while
+                // preparation was still running and had no director to tell.
+                running.silencedKinds = silencedKinds()
                 player.onSeek(running::onSeek)
                 running.start()
             }
@@ -281,6 +315,52 @@ class MainActivity : ComponentActivity() {
         val exo = player.exoPlayer
         exo.playWhenReady = !exo.playWhenReady
         announce(TransportNarration.state(exo.playWhenReady))
+    }
+
+    /**
+     * One press on the access-services row (issue #7).
+     *
+     * The order is the point. The switch is applied first, so the director is
+     * already silent by the time anything else happens; the announcement goes last,
+     * and because it is a reactive request it preempts whatever held the floor
+     * (`AudioDirector` rule 1) -- which is how pressing Suppress cuts off the
+     * description that is speaking at that moment rather than waiting it out. With
+     * no narration rendered there is no announcement, so that sentence finishes;
+     * the switch still holds from the next cue onwards.
+     *
+     * [AccessService.SCREEN_CURTAIN] falls through to the announcement alone. Its
+     * whole effect is the composable `MainActivity` draws from [services], so there
+     * is nothing here for it to do, and in particular nothing that touches the
+     * player.
+     */
+    private fun toggle(service: AccessService) {
+        val on = service !in services
+        services = if (on) services + service else services - service
+        when (service) {
+            AccessService.CAPTIONS -> player.setCaptionsEnabled(on)
+            AccessService.SCREEN_CURTAIN -> Unit
+            else -> tracer?.silencedKinds = silencedKinds()
+        }
+        log("access service=$service on=$on silenced=${silencedKinds()}")
+        announce(TransportNarration.toggle(service.label, on))
+    }
+
+    /**
+     * The two independent switches over descriptions, resolved into the one thing
+     * the director is told.
+     *
+     * Suppress is not the description toggle with a shorter name: it is a moment,
+     * and it deliberately does not write [AccessService.DESCRIPTION]. Either being
+     * off silences descriptions; turning suppress back off restores whatever the
+     * description toggle says, because the toggle was never touched. Spoken
+     * subtitles are a separate kind and neither switch reaches them -- silencing
+     * scenery must not silence dialogue.
+     */
+    private fun silencedKinds(): Set<UtteranceKind.Scheduled> = buildSet {
+        if (AccessService.DESCRIPTION !in services || AccessService.SUPPRESS in services) {
+            add(UtteranceKind.Scheduled.AUDIO_DESCRIPTION)
+        }
+        if (AccessService.SPOKEN_SUBTITLES !in services) add(UtteranceKind.Scheduled.SPOKEN_SUBTITLE)
     }
 
     /** Refused silently before [trackReady]: nothing is rendered yet to say it with. The log line is the trace. */

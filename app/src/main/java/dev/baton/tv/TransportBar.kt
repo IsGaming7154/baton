@@ -39,8 +39,9 @@ import androidx.tv.material3.Text
  * composition-tree test reads: every focusable node carries its narration text and
  * its role, and the role is tv-material's own (`Role.Button`, Button.kt:197).
  *
- * The bar is a [Column] holding one [Row] so that the access-services row (issue #7)
- * has a place one D-pad press below it.
+ * The bar is a [Column] holding the transport [Row] and, below it, the
+ * access-services row (issue #7), so that clause 7.3's controls are one D-pad
+ * press from play and pause. See [AccessServicesRow].
  */
 @Composable
 fun TransportBar(
@@ -50,9 +51,11 @@ fun TransportBar(
     onFastForward: () -> Unit,
     announce: (String) -> Unit,
     modifier: Modifier = Modifier,
+    services: Set<AccessService> = emptySet(),
+    onToggleService: (AccessService) -> Unit = {},
 ) {
     val playPause = remember { FocusRequester() }
-    Column(modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             TransportButton(TransportNarration.REWIND, onRewind, announce)
             TransportButton(
@@ -63,6 +66,7 @@ fun TransportBar(
             )
             TransportButton(TransportNarration.FAST_FORWARD, onFastForward, announce)
         }
+        AccessServicesRow(on = services, onToggle = onToggleService, announce = announce)
     }
     LaunchedEffect(Unit) { playPause.requestFocus() }
 }
@@ -117,6 +121,30 @@ object TransportNarration {
     /** What the viewer is told on return to the app, and after toggling playback. */
     fun state(playing: Boolean): String = if (playing) "Playing" else "Paused"
 
+    fun onOff(on: Boolean): String = if (on) "on" else "off"
+
+    /**
+     * What an access-services toggle says, on focus and again when it is pressed:
+     * [focused]'s label-then-role, then the state it is now in -- "Description,
+     * button, on".
+     *
+     * One sentence rather than two, because two would have to be two utterances
+     * and the second would preempt the first: the director's rule 2 is that the
+     * newest reactive request takes the floor (`AudioDirector.advance`), so a
+     * viewer moving along the row would hear five labels and no states.
+     */
+    fun toggle(label: String, on: Boolean): String = "${focused(label)}, ${onOff(on)}"
+
+    /**
+     * ponytail: every state of every control is rendered up front, which is what
+     * makes the row speak at all -- `RenderedAudioSpeaker` refuses an utterance
+     * with no `audioRef`. The cost is linear in the count and paid before playback
+     * starts (~0.5 s per phrase on the Stick, HANDOFF §4), so a row that grows much
+     * further wants the narration rendered on a background thread after the film
+     * has started rather than in front of it.
+     */
     val PHRASES: List<String> =
-        listOf(REWIND, PLAY, PAUSE, FAST_FORWARD).map(::focused) + state(playing = true) + state(playing = false)
+        listOf(REWIND, PLAY, PAUSE, FAST_FORWARD).map(::focused) +
+            state(playing = true) + state(playing = false) +
+            AccessService.entries.flatMap { listOf(toggle(it.label, on = true), toggle(it.label, on = false)) }
 }
