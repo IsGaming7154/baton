@@ -10,6 +10,7 @@ import dev.baton.director.DirectorInputs
 import dev.baton.director.InputEvent
 import dev.baton.director.ReactiveRequest
 import dev.baton.director.Speaking
+import dev.baton.director.UtteranceKind
 import dev.baton.ports.ContentGain
 import dev.baton.ports.PlaybackClock
 import dev.baton.ports.ProgrammeLoudness
@@ -57,6 +58,18 @@ class Tracer(
 
     private val handler = Handler(Looper.getMainLooper())
     private val inbox = ConcurrentLinkedQueue<InputEvent>()
+
+    /**
+     * Which scheduled kinds the access-services row currently has switched off,
+     * handed to the director as level state on every tick (see
+     * [DirectorInputs.silencedKinds]).
+     *
+     * A plain field rather than an inbox entry because it is not an event: nothing
+     * about it has to land between two other things in order. Written from the main
+     * thread, which is the thread this loop runs on, so it is read on the same
+     * thread it is written.
+     */
+    var silencedKinds: Set<UtteranceKind.Scheduled> = emptySet()
 
     private var speaking: Speaking.Utterance? = null
     private var duck: ContentDuck = ContentDuck.Unity
@@ -119,6 +132,7 @@ class Tracer(
                 playback = playback,
                 events = events,
                 programmeLufs = programmeLufs,
+                silencedKinds = silencedKinds,
             ),
         )
 

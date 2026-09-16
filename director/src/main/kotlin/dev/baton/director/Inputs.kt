@@ -135,6 +135,28 @@ data class DirectorInputs(
      * frames either side of a seek are not adjacent. [duckFor] handles it.
      */
     val programmeLufs: Double? = null,
+    /**
+     * The scheduled kinds the viewer has switched off, right now. Level state, for
+     * the reason [playback] is: "descriptions are off" is a fact that is true for a
+     * stretch of time rather than something that happens at an instant, and a
+     * director told it as an edge would have to keep its own copy and could come to
+     * disagree with the switch the viewer is actually looking at.
+     *
+     * Per kind, and a set rather than a flag, because the switches are independent:
+     * the row's description toggle and its suppress button both reach
+     * [UtteranceKind.Scheduled.AUDIO_DESCRIPTION] while the spoken-subtitle toggle
+     * does not, and silencing scenery must never silence dialogue. Who combines
+     * which switch into which kind is the caller's business; see
+     * `MainActivity.silencedKinds`.
+     *
+     * A cue of a silenced kind is passed over silently rather than dropped with a
+     * reason, for the reason a rebaseline passes over the cues behind a seek: it
+     * did not fail to find room, it was never offered any, and a switch left off
+     * for a reel would otherwise fill the log with drops that mean nothing. It is
+     * not a mute either -- nothing starts, so nothing has to be stopped, and the
+     * floor is never taken.
+     */
+    val silencedKinds: Set<UtteranceKind.Scheduled> = emptySet(),
 ) {
     init {
         require(positionMs >= 0) { "positionMs must be >= 0, was $positionMs" }

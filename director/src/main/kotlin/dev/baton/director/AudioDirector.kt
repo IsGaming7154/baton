@@ -328,6 +328,13 @@ package dev.baton.director
  * - **The tick that carries a seek is silent.** A seek is a discontinuity;
  *   scheduling resumes on the following advance, and only cues at or after the
  *   new position remain in play.
+ * - **A silenced kind is absent, not muted.** [DirectorInputs.silencedKinds] is
+ *   consulted in one place, before a cue is assessed, and a cue of a silenced kind
+ *   is resolved without a report. Nothing starts, so nothing is stopped and the
+ *   floor is never taken -- which is why switching a kind off cannot cut a
+ *   sentence in half, and cannot produce two voices. What is already speaking when
+ *   the switch is thrown finishes, unless the button press that threw it is
+ *   answered by a reactive announcement, which preempts it under rule 1.
  *
  * Not thread-safe, and not meant to be: one player, one director, one caller.
  */
@@ -456,7 +463,7 @@ class AudioDirector(
         // carrying a withdrawal has no room left to name an utterance -- so this
         // is where the two agree rather than a second rule.
         val drops = if (inputs.playback == Playback.PLAYING && !timelineJumped && withdrawal == null) {
-            arbitrateScheduled(nowMs, inputs.positionMs)
+            arbitrateScheduled(nowMs, inputs.positionMs, inputs.silencedKinds)
         } else {
             emptyList()
         }
@@ -658,8 +665,23 @@ class AudioDirector(
      * count and a playback tick rate that is tens of hertz, that is a rounding
      * error even on the 1 GB target device, and it is worth paying to keep the
      * arbitration readable -- there is no cursor to get out of step with a seek.
+     *
+     * A cue of a kind in [silenced] is passed over here and nowhere else. That is
+     * the whole of the switch, and deliberately so: it can only ever shrink the
+     * candidate set, so it cannot put a second voice in the room, and with nothing
+     * silenced -- which is every existing test, including the randomised timelines
+     * -- this loop is the loop it always was. A silenced kind still keeps its
+     * booking, because the rooms were derived from the track once
+     * ([DescriptionTrack.rooms]) and re-deriving them per tick to reclaim the space
+     * would be a different and much larger change; the launch-time toggle in
+     * `TrackPreparation` is the one that reclaims it, by removing the cues before
+     * the track is built.
      */
-    private fun arbitrateScheduled(nowMs: Long, positionMs: Long): List<DroppedCue> {
+    private fun arbitrateScheduled(
+        nowMs: Long,
+        positionMs: Long,
+        silenced: Set<UtteranceKind.Scheduled>,
+    ): List<DroppedCue> {
         var drops: MutableList<DroppedCue>? = null
         var best: Candidate? = null
         // The next booked subtitle ahead of the position, which bounds the disclosure
@@ -671,6 +693,14 @@ class AudioDirector(
                 nextBookingMs = minOf(nextBookingMs, cue.startMs)
             }
             if (cue.id in resolved || positionMs < cue.startMs) continue
+            if (cue.kind in silenced) {
+                // Its moment passed with the switch off. Resolved without a report,
+                // exactly as a rebaseline passes over what a seek jumped: nothing
+                // was refused it. Turning the switch back on does not bring it
+                // back, because the scene it describes has gone.
+                resolved += cue.id
+                continue
+            }
             when (val assessment = assess(cue, positionMs)) {
                 is Assessment.Drop -> {
                     resolved += cue.id
