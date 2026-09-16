@@ -14,7 +14,7 @@ Fire OS has no hierarchy of auditory focus. There is no arbitration layer, and n
 
 It also writes the description. An offline pipeline transcribes the audio, derives an authoritative map of dialogue and silence from the word timings, drafts a description for each silence, synthesises it, measures the resulting audio, and shortens anything that will not fit. Every cue reaches the runtime with a duration that was measured off real bytes rather than estimated from a character count.
 
-The case for the platform API is in [`FRICTION_LOG.md`](FRICTION_LOG.md) entry 1. The other seventeen entries are what the platform cost on the way there.
+The case for the platform API is in [`FRICTION_LOG.md`](FRICTION_LOG.md) entry 1. The other eighteen entries are what the platform cost on the way there.
 
 ---
 
@@ -24,7 +24,7 @@ This is a hackathon project. The honest scope:
 
 **Built**
 
-- `:director` — the arbitration state machine. Complete: two priority classes, preemption, the fit-or-drop admission rule, guard interval, seek rebaselining, pause-versus-stall handling, floor timeouts, adaptive duck depth. 75 tests, including property tests over 1,300 randomised timelines.
+- `:director` — the arbitration state machine. Complete: two priority classes, preemption, the fit-or-drop admission rule, guard interval, seek rebaselining, pause-versus-stall handling, floor timeouts, adaptive duck depth, the gap between voices. 115 tests, including property tests over 1,300 randomised timelines.
 - `:player` — ExoPlayer adapter. Plays the clip, reports position and playback state, ducks the content, and meters the content's loudness live in the render chain.
 - `:speech` — text-to-speech engine selection, rendering to WAV, the intelligibility chain, loudness normalisation, and `AudioTrack` playback with observed (not timed) completion.
 - `:loudness` — ITU-R BS.1770-4 in full: K-weighting, gated integrated LUFS, a sliding short-term meter, a 4× polyphase true-peak meter.
@@ -64,9 +64,9 @@ Gradle 8.7 comes from the wrapper. AGP 8.6.1, Kotlin 1.9.24 and every dependency
 
 This is the command that is known to work. Run here with `--rerun-tasks`, so nothing was taken from the cache, it ends in `BUILD SUCCESSFUL`. Counting the JUnit XML it leaves behind under each module's `build/test-results`:
 
-**350 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
+**360 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
 
-That is 285 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,152,340 bytes.
+That is 295 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,157,480 bytes.
 
 Nothing here needs a device, a network, an emulator, or an AWS account. `:director`, `:loudness` and `:pipeline` are pure-JVM modules and their tests are plain JUnit.
 
@@ -177,7 +177,7 @@ Left unbound on purpose:
 
 Seven modules. Four of them — `:ports`, `:director`, `:loudness` and `:pipeline` — have no Android on their classpath at all.
 
-**`:director` is pure JVM.** No Android dependency, no framework dependency, no production dependency beyond the Kotlin standard library and one serialization library. It exposes `advance(nowMs, inputs) → Directive` and owns the entire arbitration policy. This is what makes the product's central claim provable: 75 tests, including a property test over randomised timelines, run on any machine with no device attached. The one dependency it does carry is `kotlinx-serialization`, because the `DescriptionTrack` codec has to live beside the model it encodes and neither `:app` nor `:pipeline` may depend on the other.
+**`:director` is pure JVM.** No Android dependency, no framework dependency, no production dependency beyond the Kotlin standard library and one serialization library. It exposes `advance(nowMs, inputs) → Directive` and owns the entire arbitration policy. This is what makes the product's central claim provable: 115 tests, including a property test over randomised timelines, run on any machine with no device attached. The one dependency it does carry is `kotlinx-serialization`, because the `DescriptionTrack` codec has to live beside the model it encodes and neither `:app` nor `:pipeline` may depend on the other.
 
 **`:ports` is interfaces and nothing else.** `PlaybackClock`, `ContentGain`, `ProgrammeLoudness`, `Speaker`, `SpeechSynth`. It exists so that neither side can reach through the seam: the director never learns that gain is a Media3 `AudioProcessor`, and the player never learns what a cue is. It is the reason the arbitration policy can be driven by a fake speaker in a unit test and by an `AudioTrack` on the device without either knowing the difference.
 
@@ -313,8 +313,8 @@ The feature request writes itself, because Amazon has already built it. `@amazon
 
 | Number | Source |
 |---|---|
-| 350 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
-| APK 32,152,340 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
+| 360 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
+| APK 32,157,480 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
 | Demo clip: 88.6 s, 854×356 H.264, AAC 48 kHz stereo | `ffprobe` |
 | Demo clip: −30.3 LUFS integrated, LRA 20.0 LU | `ffmpeg -af ebur128` |
 | −23.0 / −33.0 LUFS on EBU Tech 3341 signals | `:loudness` tests, run here |
@@ -341,7 +341,7 @@ Open, and not hidden:
 
 ## Documents
 
-- **[`FRICTION_LOG.md`](FRICTION_LOG.md)** — eighteen entries on where Fire OS, the SDKs, the documentation and the Windows toolchain got in the way. Kept from the first commit rather than reconstructed at the end. Entries 10, 11 and 12 are worked out from AOSP and AndroidX source, with entry 12's mix-period numbers measured on the device.
+- **[`FRICTION_LOG.md`](FRICTION_LOG.md)** — nineteen entries on where Fire OS, the SDKs, the documentation and the Windows toolchain got in the way. Kept from the first commit rather than reconstructed at the end. Entries 10, 11 and 12 are worked out from AOSP and AndroidX source, with entry 12's mix-period numbers measured on the device.
 - **[`PRD.md`](PRD.md)** — the full product definition: fifty user stories, the priority model, the pipeline design, and an explicit out-of-scope list.
 
 ---

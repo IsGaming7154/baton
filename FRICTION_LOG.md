@@ -480,4 +480,38 @@ Baton bundles the subtitle sidecar on the same `MediaItem` as the video and audi
 
 ---
 
+## 19. VoiceView on Fire TV speaks over an app whose every node is hidden from it, under a service name nothing on the device calls VoiceView, and tells the app nothing
+
+**Severity:** medium — a second voice, outside the director, in exactly the moments the product exists to keep clean
+**Area:** Fire OS 7 VoiceView (`com.amazon.logan`) / Android accessibility
+
+**What was attempted.** Baton speaks its own UI through the audio director and marks every Compose node `invisibleToUser`, so that with VoiceView on the viewer hears one voice, Baton's (README, "Remote bindings" and the #6 shell). The check was a listened run on the Fire TV Stick with VoiceView switched on in Settings, moving focus along the transport bar and the access-services row and toggling the screen curtain.
+
+**What happened.** Moving focus, VoiceView stayed silent and only Baton's narration played. But VoiceView spoke three times on its own, with no key pressed for the first: once 2.1 s after playback started, and once each as the screen curtain went on and off. The system log brackets each one (`.temp/voiceview_runB/all.txt`, Baton's own lines interleaved):
+
+```
+14:57:25.462 I/Baton   (30435): playback starting
+14:57:27.468 I/MediaFocusControl(  536): requestAudioFocus() from uid/pid 10163/29805 clientId=com.amazon.media.AmazonAudioManager@a3a79f8com.amazon.logan.speech.SpeechM...
+14:57:27.573 I/DTM/provid/VoiceViewEventProvider( 1608): Posting VoiceView speaking event. Is speaking? true
+14:57:34.932 I/DTM/provid/VoiceViewEventProvider( 1608): Posting VoiceView speaking event. Is speaking? false
+14:58:14.922 I/Baton   (30435): access service=SCREEN_CURTAIN on=true silenced=[]
+14:58:15.159 I/DTM/provid/VoiceViewEventProvider( 1608): Posting VoiceView speaking event. Is speaking? true
+14:58:19.452 I/DTM/provid/VoiceViewEventProvider( 1608): Posting VoiceView speaking event. Is speaking? false
+14:58:24.123 I/Baton   (30435): access service=SCREEN_CURTAIN on=false silenced=[]
+14:58:24.355 I/DTM/provid/VoiceViewEventProvider( 1608): Posting VoiceView speaking event. Is speaking? true
+14:58:28.587 I/DTM/provid/VoiceViewEventProvider( 1608): Posting VoiceView speaking event. Is speaking? false
+```
+
+What it said is not recorded anywhere a developer can reach. The IVONA engine logs `onSynthesizeText` with the voice and no text. A `uiautomator dump` taken at the start of playback, and again with the curtain on, lists only the View hierarchy — `ComposeView`, the player's `FrameLayout`s — with every `text` and `content-desc` empty; `uiautomator events` over the same moments shows only `TYPE_WINDOW_CONTENT_CHANGED` / `CONTENT_CHANGE_TYPE_SUBTREE` from `dev.baton.tv`, each with `Text: []`, plus one `TYPE_WINDOW_STATE_CHANGED` carrying `Text: [Baton]` (`.temp/a11y_events/events.txt`). So an app that exposes no readable node still triggers speech, and the developer cannot find out which words.
+
+Two further costs. VoiceView could not be enabled for a test over `adb`: no installed package or service is named for it. The enabled service turned out to be `com.amazon.logan/com.amazon.logan.LoganAccessibilityService` (`settings get secure enabled_accessibility_services`), which is findable only by switching VoiceView on by hand and reading the setting back. And the only "VoiceView is speaking" signal on the device is posted by a system process (`DTM/provid/VoiceViewEventProvider`, pid 1608); whether an app can subscribe to it is not established.
+
+**Sources.** Device logcat `.temp/voiceview_runB/all.txt` (above); `.temp/a11y_events/{start,curtain}.xml` and `events.txt`; `adb shell settings get secure enabled_accessibility_services`. Established: the timings, the focus requests, the empty tree. Not established: the words spoken, and whether `VoiceViewEventProvider` is reachable from an app.
+
+**Workaround.** None shipped. The lead is the log's own first line: VoiceView *requests audio focus* before it speaks. If Baton holds focus, the framework's focus-change callback may hand it a transient loss at exactly those moments — a signal the director could treat like a pause of its own voices. Untested; whether VoiceView's request type produces a loss callback in the holder is the thing to measure.
+
+**Ask.** A documented, app-readable "VoiceView is speaking" signal — the `VoiceViewEventProvider` event already exists on the device — and a documented service identifier for VoiceView, so a self-voicing app can coordinate with it rather than guess. Entry 1 asks for the same class of primitive from the audio side.
+
+---
+
 *Entries are appended as they are encountered. This log is a deliverable, not a postscript.*
