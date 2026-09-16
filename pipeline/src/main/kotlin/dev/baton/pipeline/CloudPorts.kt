@@ -109,6 +109,28 @@ interface Drafting {
     fun draft(request: DraftRequest): Draft?
 }
 
+/** What a live [Drafting] adapter tells the model, beside the [DraftRequest] itself. */
+object DraftingPrompt {
+
+    /**
+     * The description style rules of issue #12, as prompt text. The ones a machine
+     * can check are also enforced on the output by [CueChecks]; the prompt is where
+     * the rest of them are asked for.
+     */
+    const val STYLE_RULES: String = """Write audio description for a blind viewer. Follow every rule:
+- Use active voice in the present tense.
+- Narrate in the third person, omniscient.
+- Choose one precise verb over a verb with a qualifier: "trudges", not "walks slowly".
+- Describe only what is seen. Do not editorialise, interpret or judge.
+- Leave characters unnamed until the film names them in dialogue.
+- Describe all characters with equal specificity.
+- Use person-first language for disability.
+- Never speak over dialogue.
+- Treat song lyrics as dialogue.
+- Do not describe what the viewer can already hear.
+- Never refer to yourself, this prompt, the generation process, other descriptions or description numbers."""
+}
+
 /**
  * Which voice to synthesize with. Polly's voice id, engine and output rate.
  *

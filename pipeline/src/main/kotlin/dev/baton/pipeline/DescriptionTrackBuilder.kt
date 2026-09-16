@@ -76,7 +76,8 @@ data class BuildRequest(
  * at all is in [BuildResult.drops] with a reason; a window shorter than
  * [PipelineConfig.minimumUsefulGapMs] is not authored into, stays in the gap map
  * because the silence is real, and is explained by that threshold rather than by
- * a drop.
+ * a drop. And no emitted cue breaks a style rule [CueChecks] can check: a cue that
+ * does fails the build instead of shipping.
  */
 class DescriptionTrackBuilder(
     private val transcription: Transcription,
@@ -165,6 +166,9 @@ class DescriptionTrackBuilder(
         )
 
         assertRuntimeWillAdmit(track)
+        CueChecks.checkNoDialogueOverlap(cues, GapMapper.dialogueSpans(transcript, request.mediaDurationMs, config.gapMap))
+        CueChecks.checkNoSelfReference(cues)
+        CueChecks.checkNamesAfterTranscript(cues, transcript)
         return BuildResult(track, drops, fits)
     }
 
