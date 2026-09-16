@@ -154,7 +154,19 @@ class RenderedAudio(
     val bytes: ByteArray? = null,
     /** Where the audio was stored, when the synthesizer stored it. */
     val audioRef: String? = null,
+    /**
+     * The characters the synthesizer reports it billed for this audio -- Polly's
+     * `x-amzn-RequestCharacters` -- or null when it reports none. [SpendGuard]
+     * settles its pre-call estimate against this.
+     */
+    val requestCharacters: Int? = null,
 ) {
+    init {
+        require(requestCharacters == null || requestCharacters >= 0) {
+            "requestCharacters must be >= 0, was $requestCharacters"
+        }
+    }
+
     val duration: MeasuredDurationMs = MeasuredDurationMs.ofRenderedAudio(frameCount, sampleRateHz)
 
     companion object {
@@ -165,7 +177,12 @@ class RenderedAudio(
          * for `OutputFormat=pcm`. The frame count comes off the buffer's length,
          * so the number is a property of the audio and of nothing else.
          */
-        fun ofPcm16Mono(bytes: ByteArray, sampleRateHz: Int, audioRef: String? = null): RenderedAudio {
+        fun ofPcm16Mono(
+            bytes: ByteArray,
+            sampleRateHz: Int,
+            audioRef: String? = null,
+            requestCharacters: Int? = null,
+        ): RenderedAudio {
             require(bytes.size % BYTES_PER_PCM16_MONO_FRAME == 0) {
                 "a 16-bit mono buffer has an even length; ${bytes.size} bytes is half a frame short"
             }
@@ -174,6 +191,7 @@ class RenderedAudio(
                 sampleRateHz = sampleRateHz,
                 bytes = bytes,
                 audioRef = audioRef,
+                requestCharacters = requestCharacters,
             )
         }
     }

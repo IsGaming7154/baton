@@ -98,8 +98,10 @@ data class ServiceSpend(val calls: Int, val estimatedUsd: Double, val recordedUs
  * One guard is one run: the per-run cap and the Nova call count start from zero with each
  * guard, and the cumulative total is read from, and kept in, the ledger.
  *
- * What is recorded is the estimate, since no live port reports its billed usage yet. A port
- * marked [Unbilled] records $0, and is still counted and checked.
+ * What is recorded is the estimate, until the call comes back reporting its billed usage --
+ * only Polly does, as [RenderedAudio.requestCharacters] -- and then that usage replaces the
+ * estimate, in the ledger too. A port marked [Unbilled] records $0, and is still counted and
+ * checked.
  */
 class SpendGuard(private val config: SpendConfig, mediaDurationMs: Long) {
 
@@ -148,8 +150,12 @@ class SpendGuard(private val config: SpendConfig, mediaDurationMs: Long) {
                 "standard" -> AwsPrices.POLLY_STANDARD_USD_PER_CHARACTER
                 else -> refuse("no Polly price is on record for the '${voice.engine}' engine, so its calls cannot be estimated")
             }
-            charge(Service.POLLY, text.length * perCharacter, port)
-            return port.synthesize(text, voice)
+            val estimateUsd = text.length * perCharacter
+            charge(Service.POLLY, estimateUsd, port)
+            val audio = port.synthesize(text, voice)
+            val billed = audio.requestCharacters
+            if (billed != null && port !is Unbilled) settle(Service.POLLY, estimateUsd, billed * perCharacter)
+            return audio
         }
     }
 
@@ -201,6 +207,21 @@ class SpendGuard(private val config: SpendConfig, mediaDurationMs: Long) {
         }
     }
 
+    /**
+     * Replace a recorded estimate with what the service reported billing, once the call is back.
+     *
+     * Not checked against the caps: the money is already spent, and hiding it would be worse
+     * than crossing a cap. A total now over a cap refuses the next call in [charge].
+     */
+    private fun settle(service: Service, estimateUsd: Double, billedUsd: Double) {
+        val correctionUsd = billedUsd - estimateUsd
+        if (correctionUsd == 0.0) return
+        val before = spend.getValue(service)
+        spend[service] = before.copy(recordedUsd = before.recordedUsd + correctionUsd)
+        cumulativeUsd += correctionUsd
+        writeLedger()
+    }
+
     /** A missing ledger is nothing spent. One that cannot be read is refused, never taken as $0. */
     private fun readLedger(): Double {
         val path = config.ledgerPath
@@ -227,8 +248,8 @@ class SpendGuard(private val config: SpendConfig, mediaDurationMs: Long) {
 
 /**
  * A run's report, written as JSON beside its track. `recordedUsd` is what went into the
- * ledger: $0 for an [Unbilled] port, otherwise the estimate, since no live port reports
- * billed usage yet.
+ * ledger: $0 for an [Unbilled] port, otherwise the billed usage where the service reported
+ * it (Polly) and the estimate where it did not.
  */
 @Serializable
 data class RunReport(

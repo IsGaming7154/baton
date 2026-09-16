@@ -45,6 +45,45 @@ class SpendGuardTest : FunSpec({
         ledger.readText() shouldBe """{"spentUsd":9.99}"""
     }
 
+    test("the characters Polly reports billing replace the estimate, in the run and in the ledger") {
+        val ledger = freshLedger()
+        val guard = SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND)
+
+        guard.guarded(CountingSynthesis(billedCharacters = 900)).synthesize(thousandCharacters, voice)
+
+        guard.runUsd shouldBe (900 * 16.0 / 1e6 plusOrMinus 1e-12)
+        SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND).cumulativeUsd shouldBe (900 * 16.0 / 1e6 plusOrMinus 1e-12)
+        val polly = guard.report(ledger.resolveSibling("t.json"), PipelineConfig()).polly
+        polly.estimatedUsd shouldBe (0.016 plusOrMinus 1e-12)
+        polly.recordedUsd shouldBe (900 * 16.0 / 1e6 plusOrMinus 1e-12)
+    }
+
+    test("billing that comes back over the estimate is recorded past the cap, and the next call is refused") {
+        val ledger = freshLedger()
+        val polly = CountingSynthesis(billedCharacters = 1_500)
+        val guard = SpendGuard(SpendConfig(perRunCapUsd = 0.02, ledgerPath = ledger), ONE_SECOND)
+        val guarded = guard.guarded(polly)
+
+        // $0.016 estimated, under the $0.02 cap; $0.024 billed, over it.
+        guarded.synthesize(thousandCharacters, voice)
+        guard.runUsd shouldBe (0.024 plusOrMinus 1e-12)
+        SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND).cumulativeUsd shouldBe (0.024 plusOrMinus 1e-12)
+
+        shouldThrow<SpendRefused> { guarded.synthesize("a", voice) }.message shouldContain "per-run cap"
+        polly.calls shouldBe 1
+    }
+
+    test("an unbilled port's reported characters still record nothing") {
+        val ledger = freshLedger()
+        val guard = SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND)
+        val free = object : CountingSynthesis(billedCharacters = 1_000), Unbilled {}
+
+        guard.guarded(free).synthesize(thousandCharacters, voice)
+
+        guard.runUsd shouldBe 0.0
+        Files.exists(ledger) shouldBe false
+    }
+
     test("the 151st Nova call of a run is refused") {
         val nova = CountingDrafter()
         val guarded = SpendGuard(SpendConfig(ledgerPath = freshLedger()), ONE_SECOND).guarded(nova)
@@ -138,13 +177,16 @@ private const val ONE_SECOND: Long = 1_000L
 
 private fun freshLedger(): Path = Files.createTempDirectory("baton-spend").resolve("aws-spend.json")
 
-/** A billed stand-in for Polly: priced as Polly, and counting the calls that reached it. */
-private class CountingSynthesis : Synthesis {
+/**
+ * A billed stand-in for Polly: priced as Polly, counting the calls that reached it, and
+ * reporting [billedCharacters] as Polly's `x-amzn-RequestCharacters` would.
+ */
+private open class CountingSynthesis(private val billedCharacters: Int? = null) : Synthesis {
     var calls = 0
 
     override fun synthesize(text: String, voice: VoiceSpec): RenderedAudio {
         calls++
-        return RenderedAudio.ofPcm16Mono(ByteArray(3_200), voice.sampleRateHz)
+        return RenderedAudio.ofPcm16Mono(ByteArray(3_200), voice.sampleRateHz, requestCharacters = billedCharacters)
     }
 }
 

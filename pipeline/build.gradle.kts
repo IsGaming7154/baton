@@ -26,7 +26,22 @@ tasks.withType<KotlinCompile>().configureEach {
 dependencies {
     api(project(":director"))
 
+    implementation("software.amazon.awssdk:polly:2.54.19") {
+        // Netty backs only the async client. The sync PollyClient finds its HTTP client
+        // through the sync service loader, which picks Apache 5 (sdk-core,
+        // ClasspathSdkHttpServiceProvider).
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+    }
+
     testImplementation("io.kotest:kotest-runner-junit5:5.9.1")
+}
+
+// One live Polly call, about $0.001, into the real ledger. Never wired into build or test:
+//   gradlew :pipeline:pollySmoke --args=build/polly-smoke.wav
+tasks.register<JavaExec>("pollySmoke") {
+    description = "Makes ONE paid Amazon Polly call through the spend guard and writes it as a WAV."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.baton.pipeline.live.PollySmokeKt")
 }
 
 tasks.withType<Test>().configureEach {

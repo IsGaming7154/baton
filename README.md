@@ -35,7 +35,7 @@ The tracer has been run on a Fire TV Stick, and the device measurements quoted t
 
 **Designed, specified, not built**
 
-- The live AWS pipeline. `:pipeline`'s ports are defined against Transcribe, Bedrock Nova and Polly, and its fixtures are stored in those services' own response shapes so the parsers are the real ones — but no AWS SDK is on the classpath and nothing in the repository makes a network call. This is deliberate: the loop that has to be right is the one that runs for free.
+- The live AWS pipeline. `:pipeline`'s ports are defined against Transcribe, Bedrock Nova and Polly, and its fixtures are stored in those services' own response shapes so the parsers are the real ones. Only Polly has a live adapter so far (`PollySynthesis`, on the AWS SDK for Java v2): it is tested against a fake client, and its one manual smoke call (`gradlew :pipeline:pollySmoke`) has not yet been run. Transcribe and Nova have no SDK on the classpath, and nothing in the test suite makes a network call. This is deliberate: the loop that has to be right is the one that runs for free.
 - Reactive speech beyond menu narration. The director arbitrates `VQA_ANSWER` today, and its preemption behaviour is tested, but nothing in the app raises one yet. There is no question ring and no visual question answering.
 - Spoken subtitles from a *live* subtitle track. The kind exists and outranks description in the policy, and the app now parses and speaks a bundled subtitle sidecar (`SubtitleFile.kt`, `TrackPreparation.kt`) the same way it speaks the bundled description track; what remains unbuilt is deriving that subtitle track from the live pipeline, rather than authoring it in advance.
 - The rest of the accessible UI: per-title description state, density and length settings. Specified in [`PRD.md`](PRD.md). The screen curtain and the access-services row are built and were checked on the Stick from its log and screenshots; neither has yet been run with VoiceView on.
@@ -64,9 +64,9 @@ Gradle 8.7 comes from the wrapper. AGP 8.6.1, Kotlin 1.9.24 and every dependency
 
 This is the command that is known to work. Run here with `--rerun-tasks`, so nothing was taken from the cache, it ends in `BUILD SUCCESSFUL`. Counting the JUnit XML it leaves behind under each module's `build/test-results`:
 
-**341 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
+**350 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
 
-That is 276 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,152,340 bytes.
+That is 285 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,152,340 bytes.
 
 Nothing here needs a device, a network, an emulator, or an AWS account. `:director`, `:loudness` and `:pipeline` are pure-JVM modules and their tests are plain JUnit.
 
@@ -231,7 +231,7 @@ Friction-log entries 10 and 11 are the record of why this had to be written by h
 
 ### Designed against, not yet called — `:pipeline`
 
-`:pipeline`'s ports name **Amazon Transcribe** (word-level timings), **Amazon Bedrock / Nova** (video understanding and drafting) and **Amazon Polly** (synthesis), and its fixtures are stored in Transcribe's own response shape so that the parser exercised by the tests is the parser the live slice needs. No AWS SDK is on the classpath. Treat this as direction, not as a running integration.
+`:pipeline`'s ports name **Amazon Transcribe** (word-level timings), **Amazon Bedrock / Nova** (video understanding and drafting) and **Amazon Polly** (synthesis), and its fixtures are stored in Transcribe's own response shape so that the parser exercised by the tests is the parser the live slice needs. The Polly port has a live adapter on the AWS SDK for Java v2, whose billed characters settle the spend guard's estimate; it is exercised only against a fake client, and no live call has been recorded. Transcribe and Nova have no SDK on the classpath yet. Treat this as direction, not as a running integration.
 
 ---
 
@@ -311,7 +311,7 @@ The feature request writes itself, because Amazon has already built it. `@amazon
 
 | Number | Source |
 |---|---|
-| 341 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
+| 350 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
 | APK 32,152,340 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
 | Demo clip: 88.6 s, 854×356 H.264, AAC 48 kHz stereo | `ffprobe` |
 | Demo clip: −30.3 LUFS integrated, LRA 20.0 LU | `ffmpeg -af ebur128` |
