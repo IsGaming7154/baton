@@ -123,7 +123,7 @@ object TrackPreparation {
             emptyList()
         }
         val disclosure = measureDisclosure(synth, log)
-        val narration = measureNarration(synth, log)
+        val narration = measureNarration(synth, TransportNarration.AT_START, log)
 
         // Concatenated, not sorted: the director's validation asks only that ids
         // be unique, and both its linear cue walk and the rooms it derives treat
@@ -141,7 +141,8 @@ object TrackPreparation {
     }
 
     /**
-     * The transport bar's phrases ([TransportNarration.PHRASES]), keyed by their text.
+     * The given transport-bar phrases, keyed by their text. [prepare] renders
+     * [TransportNarration.AT_START]; the activity renders the rest after playback starts.
      *
      * Rendered and measured here for the reasons the disclosure is: the speaker plays
      * only rendered files, and a reactive utterance with a measured length is held to
@@ -149,15 +150,15 @@ object TrackPreparation {
      * nothing measured. A key with no dash cannot collide with a cue's
      * "<cue>-<variant>" file.
      */
-    private fun measureNarration(synth: SpeechSynth, log: (String) -> Unit): Map<String, Variant> =
-        TransportNarration.PHRASES.withIndex().associate { (index, phrase) ->
-            val rendered = synth.render("narration$index", phrase)
+    fun measureNarration(synth: SpeechSynth, phrases: List<String>, log: (String) -> Unit): Map<String, Variant> =
+        phrases.associateWith { phrase ->
+            val rendered = synth.render("narration${TransportNarration.PHRASES.indexOf(phrase)}", phrase)
             log(
                 "narration measured phrase=\"$phrase\" engine=${synth.engineId} frames=${rendered.frameCount} " +
                     "rate=${rendered.sampleRateHz}Hz measuredMs=${rendered.duration.millis} " +
                     "file=${File(rendered.audioRef).name}",
             )
-            phrase to Variant(text = phrase, measuredDuration = rendered.duration, audioRef = rendered.audioRef)
+            Variant(text = phrase, measuredDuration = rendered.duration, audioRef = rendered.audioRef)
         }
 
     /**

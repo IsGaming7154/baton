@@ -136,15 +136,20 @@ object TransportNarration {
     fun toggle(label: String, on: Boolean): String = "${focused(label)}, ${onOff(on)}"
 
     /**
-     * ponytail: every state of every control is rendered up front, which is what
-     * makes the row speak at all -- `RenderedAudioSpeaker` refuses an utterance
-     * with no `audioRef`. The cost is linear in the count and paid before playback
-     * starts (~0.5 s per phrase on the Stick, HANDOFF §4), so a row that grows much
-     * further wants the narration rendered on a background thread after the film
-     * has started rather than in front of it.
+     * `RenderedAudioSpeaker` refuses an utterance with no `audioRef`, so a phrase
+     * speaks only once rendered (~0.5-0.7 s each on the Stick). [AT_START] is what
+     * the viewer can reach before pressing Down -- focus lands on Play -- and is
+     * rendered in front of playback. [AFTER_START], the row's toggles, is rendered
+     * on the preparation thread once the film has started: measured on the Stick
+     * 2026-09-16, it was the difference between ~16 s and 23.4 s of preparation.
+     * A toggle focused before then is logged `not-rendered` and stays silent.
      */
-    val PHRASES: List<String> =
+    val AT_START: List<String> =
         listOf(REWIND, PLAY, PAUSE, FAST_FORWARD).map(::focused) +
-            state(playing = true) + state(playing = false) +
-            AccessService.entries.flatMap { listOf(toggle(it.label, on = true), toggle(it.label, on = false)) }
+            state(playing = true) + state(playing = false)
+
+    val AFTER_START: List<String> =
+        AccessService.entries.flatMap { listOf(toggle(it.label, on = true), toggle(it.label, on = false)) }
+
+    val PHRASES: List<String> = AT_START + AFTER_START
 }

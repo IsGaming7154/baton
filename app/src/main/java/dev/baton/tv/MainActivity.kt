@@ -243,6 +243,20 @@ class MainActivity : ComponentActivity() {
             val playForMs = intent.getLongExtra("playForMs", 0L)
             if (playForMs > 0L) handler.postDelayed({ player.exoPlayer.playWhenReady = false }, playForMs)
         }
+
+        // The row's phrases, rendered behind the film rather than in front of it
+        // (TransportNarration.AFTER_START). Merged on the UI thread, which is the
+        // only thread that reads or writes `narration`, and queued after the handoff
+        // above. A failure here -- including onDestroy releasing the synth mid-render --
+        // leaves the row silent and says so in the log.
+        val engine = prepared?.synth ?: return
+        val startedAtMs = System.currentTimeMillis()
+        runCatching { TrackPreparation.measureNarration(engine, TransportNarration.AFTER_START, ::log) }
+            .onSuccess { rendered ->
+                log("narration rendered after start count=${rendered.size} inMs=${System.currentTimeMillis() - startedAtMs}")
+                runOnUiThread { if (!isDestroyed) narration = narration + rendered }
+            }
+            .onFailure { log("ERROR narration after start failed: $it") }
     }
 
     /**
