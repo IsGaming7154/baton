@@ -54,7 +54,7 @@ tasks.register<JavaExec>("pollySmoke") {
 // One live Transcribe job, priced by the spend guard at AwsPrices.TRANSCRIBE_BATCH_USD_PER_SECOND
 // (89 s of demo clip: $0.0089), into the real ledger. The bucket must
 // already exist in us-east-1. Never wired into build or test:
-//   gradlew :pipeline:transcribeSmoke --args="<media> <bucket> <out.json> <duration ms>"
+//   gradlew :pipeline:transcribeSmoke --args=<media>,<bucket>,<out.json>,<duration ms>
 tasks.register<JavaExec>("transcribeSmoke") {
     description = "Runs ONE paid Amazon Transcribe job through the spend guard and writes its raw output JSON."
     classpath = sourceSets["main"].runtimeClasspath

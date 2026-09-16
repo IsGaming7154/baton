@@ -12,7 +12,7 @@ import java.nio.file.Path
 import kotlin.system.exitProcess
 
 private const val USAGE =
-    "usage: gradlew :pipeline:transcribeSmoke --args=\"<media file> <bucket> <out transcript.json> <media duration ms>\""
+    "usage: gradlew :pipeline:transcribeSmoke --args=<media file>,<bucket>,<out transcript.json>,<media duration ms>"
 
 /**
  * The one live Transcribe job, run by hand, never by the build. It goes through the spend guard
@@ -20,7 +20,10 @@ private const val USAGE =
  * command line (88600 for the demo clip). The bucket is not created here: it must already
  * exist, in us-east-1.
  */
-fun main(args: Array<String>) {
+fun main(rawArgs: Array<String>) {
+    // Commas, not spaces: from a checkout whose path has a space, gradlew.bat cannot be handed
+    // a quoted --args at all under Git Bash ("'C:\Claude' is not recognized").
+    val args = rawArgs.singleOrNull()?.split(',') ?: rawArgs.toList()
     require(args.size == 4) { USAGE }
     val media = Path.of(args[0]).toAbsolutePath()
     val bucket = args[1]
