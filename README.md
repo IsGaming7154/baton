@@ -28,7 +28,7 @@ This is a hackathon project. The honest scope:
 - `:player` — ExoPlayer adapter. Plays the clip, reports position and playback state, ducks the content, and meters the content's loudness live in the render chain.
 - `:speech` — text-to-speech engine selection, rendering to WAV, the intelligibility chain, loudness normalisation, and `AudioTrack` playback with observed (not timed) completion.
 - `:loudness` — ITU-R BS.1770-4 in full: K-weighting, gated integrated LUFS, a sliding short-term meter, a 4× polyphase true-peak meter.
-- `:app` — the tracer. One bundled clip, one bundled description track of six description cues, a bundled English subtitle sidecar parsed into spoken-subtitle cues and rendered on-screen through Media3, the whole timeline logged under a single tag. A transport bar — Rewind, Play/Pause, Fast-forward — is the whole UI: each focus change is spoken as `UI_NARRATION` through the director, ducking the film, and is cut off by the next press.
+- `:app` — the tracer. One bundled clip, one bundled description track of six description cues, a bundled English subtitle sidecar parsed into spoken-subtitle cues and rendered on-screen through Media3, the whole timeline logged under a single tag. A transport bar — Rewind, Play/Pause, Fast-forward — and, one press below it, an access-services row — Description, Spoken subtitles, Captions, Suppress description, Screen curtain — are the whole UI: each focus change is spoken as `UI_NARRATION` through the director, ducking the film, and is cut off by the next press. Turning Description or Spoken subtitles off makes the director pass that kind's cues over; the curtain blacks out the picture and leaves the sound alone. The row's phrases are rendered on the preparation thread after the film starts, so a toggle focused in the first ~7 s of playback is silent (logged `not-rendered`).
 - `:pipeline` — the offline track builder, complete and exercised end to end against recorded fixtures shaped like real Amazon Transcribe, Nova and Polly responses.
 
 The tracer has been run on a Fire TV Stick, and the device measurements quoted throughout this document come from those runs; they are labelled where they appear. Everything else here was verified from the repository itself.
@@ -38,7 +38,7 @@ The tracer has been run on a Fire TV Stick, and the device measurements quoted t
 - The live AWS pipeline. `:pipeline`'s ports are defined against Transcribe, Bedrock Nova and Polly, and its fixtures are stored in those services' own response shapes so the parsers are the real ones — but no AWS SDK is on the classpath and nothing in the repository makes a network call. This is deliberate: the loop that has to be right is the one that runs for free.
 - Reactive speech beyond menu narration. The director arbitrates `VQA_ANSWER` today, and its preemption behaviour is tested, but nothing in the app raises one yet. There is no question ring and no visual question answering.
 - Spoken subtitles from a *live* subtitle track. The kind exists and outranks description in the policy, and the app now parses and speaks a bundled subtitle sidecar (`SubtitleFile.kt`, `TrackPreparation.kt`) the same way it speaks the bundled description track; what remains unbuilt is deriving that subtitle track from the live pipeline, rather than authoring it in advance.
-- The accessible UI: screen curtain, the access-services row, per-title description state, density and length settings. Specified in [`PRD.md`](PRD.md); the app currently shows the video and the transport bar and nothing else.
+- The rest of the accessible UI: per-title description state, density and length settings. Specified in [`PRD.md`](PRD.md). The screen curtain and the access-services row are built and were checked on the Stick from its log and screenshots; neither has yet been run with VoiceView on.
 
 **Not possible, and why it is worth saying**
 
@@ -64,9 +64,9 @@ Gradle 8.7 comes from the wrapper. AGP 8.6.1, Kotlin 1.9.24 and every dependency
 
 This is the command that is known to work. Run here with `--rerun-tasks`, so nothing was taken from the cache, it ends in `BUILD SUCCESSFUL`. Counting the JUnit XML it leaves behind under each module's `build/test-results`:
 
-**318 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
+**341 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
 
-That is 253 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest` runs on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,122,988 bytes.
+That is 276 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,152,340 bytes.
 
 Nothing here needs a device, a network, an emulator, or an AWS account. `:director`, `:loudness` and `:pipeline` are pure-JVM modules and their tests are plain JUnit.
 
@@ -311,8 +311,8 @@ The feature request writes itself, because Amazon has already built it. `@amazon
 
 | Number | Source |
 |---|---|
-| 318 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
-| APK 32,122,988 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
+| 341 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
+| APK 32,152,340 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
 | Demo clip: 88.6 s, 854×356 H.264, AAC 48 kHz stereo | `ffprobe` |
 | Demo clip: −30.3 LUFS integrated, LRA 20.0 LU | `ffmpeg -af ebur128` |
 | −23.0 / −33.0 LUFS on EBU Tech 3341 signals | `:loudness` tests, run here |
