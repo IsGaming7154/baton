@@ -253,6 +253,8 @@ Spoken subtitles are known in advance, so they are booked against the timeline b
 
 The longest variant that satisfies it wins; if none does, the cue is **dropped and the drop is reported with a reason** rather than played late or played over. `guardMs` is 250.
 
+No scheduled voice starts until `interUtteranceGapMs` (300 ms, chosen rather than measured) of content has passed since the floor was last released, so two of our voices never run end to start. A cue held back by it is judged by the rule above at the moment it actually starts. Button presses don't wait for it, and a seek clears it.
+
 `AudioDirectorInvariantTest` drives 1,000 randomised timelines through this — randomised cue placement, dialogue onsets, durations, button presses, seeks, pauses and stalls — asserting at every tick that no two voices are ever active, then repeats it 300 times under a deliberately hostile configuration. It also asserts that the generators keep *reaching* the hard states, so the suite cannot quietly go vacuous.
 
 Three readings of the policy are worth pulling out because they were decisions, not omissions:

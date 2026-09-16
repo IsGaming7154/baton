@@ -45,6 +45,15 @@ package dev.baton.director
  * silence. See [CueRooms] for why the reservation is a property of the track
  * rather than a scan performed per tick.
  *
+ * And no scheduled utterance -- cue or disclosure -- starts until the content has
+ * moved [DirectorConfig.interUtteranceGapMs] past the position the floor was last
+ * released at, by a speaker's report, a pause or a withdrawal. Back to back, a
+ * subtitle and the description behind it in the same synthetic voice are heard as
+ * one voice running over another. A cue the gap holds back is judged by the rule
+ * above at the position it actually starts at, and dropped on the ordinary reasons
+ * if the gap has cost it its room. Reactive speech does not wait for the gap, and a
+ * seek clears it.
+ *
  * How far the content is ducked while that happens is not a constant. It is
  * computed from how loud the content actually is at the cue, so that the
  * narration ends up a fixed loudness difference above the bed rather than a fixed
@@ -364,6 +373,24 @@ class AudioDirector(
     private var active: Speaking.Utterance? = null
 
     /**
+     * Content position at which the floor was last released, or null when nothing
+     * has released it since the last rebaseline. No scheduled utterance starts until
+     * the content has moved [DirectorConfig.interUtteranceGapMs] past it.
+     *
+     * The content clock and not the wall clock, because the gap is paid for out of
+     * the room a cue is admitted against, and that room is measured on the content
+     * timeline: a cue held back by the gap is re-assessed at the position it would
+     * actually start at, and one the gap has squeezed out is dropped on the numbers
+     * it was judged on. The two clocks only part company while the picture is
+     * stopped, and there the content clock errs towards air. A release during a
+     * pause or a stall is still owed its gap once frames return, because resuming is
+     * itself something the viewer hears, and a voice on that instant is butted
+     * against it. Cleared by a seek, which is a discontinuity: the position a
+     * release was recorded at says nothing about the new one.
+     */
+    private var releasedAtPositionMs: Long? = null
+
+    /**
      * Wall clock reading at which the interruption in progress began, or null when
      * the content is not stalled -- or is stalled without having interrupted
      * anything. See [noteStall].
@@ -413,8 +440,9 @@ class AudioDirector(
         // decision outranks the interruption they made it during. What does not
         // count is entering the stall itself -- nobody decided that, so nothing is
         // given up for it. See the class doc.
-        if (inputs.playback == Playback.PAUSED && lastPlayback != Playback.PAUSED) {
+        if (inputs.playback == Playback.PAUSED && lastPlayback != Playback.PAUSED && active != null) {
             active = null
+            releasedAtPositionMs = inputs.positionMs
         }
         noteStall(nowMs, inputs.playback)
         lastPlayback = inputs.playback
@@ -429,7 +457,10 @@ class AudioDirector(
                 }
 
                 is InputEvent.SpeechEnded -> {
-                    if (active?.id == event.id) active = null
+                    if (active?.id == event.id) {
+                        active = null
+                        releasedAtPositionMs = inputs.positionMs
+                    }
                     // Whether or not it still holds the floor by this point in the
                     // tick. A speaker reports only audio it played to the last frame,
                     // so this is evidence the viewer heard the sentence even when a
@@ -566,6 +597,7 @@ class AudioDirector(
             ?: holder.pastWallCeiling(nowMs)
             ?: return null
         active = null
+        releasedAtPositionMs = positionMs
         // Discharged, not re-owed: a withdrawal only reaches past the measured
         // length, so the sentence had all of its time. See the class doc.
         if (withdrawal.id == DISCLOSURE_ID) disclosureOwed = false
@@ -647,6 +679,7 @@ class AudioDirector(
      * so seeking backwards genuinely replays a scene rather than skipping it.
      */
     private fun rebaseline(positionMs: Long) {
+        releasedAtPositionMs = null
         resolved.clear()
         for (cue in track.cues) {
             if (cue.startMs < positionMs) resolved += cue.id
@@ -726,6 +759,16 @@ class AudioDirector(
                     }
                 }
             }
+        }
+
+        // The floor is free for a scheduled start only once the gap since it was last
+        // released has run. Admission alone waits: every cue above was assessed at
+        // this position regardless, so one the gap squeezes out is dropped on the
+        // ordinary reasons, and one it merely delays is judged again, afresh, at the
+        // position it actually starts at.
+        val released = releasedAtPositionMs
+        if (released != null && positionMs < released + config.interUtteranceGapMs) {
+            return drops ?: emptyList()
         }
 
         // Rule 3's first clause. Taken before the cue contest's winner, and outside

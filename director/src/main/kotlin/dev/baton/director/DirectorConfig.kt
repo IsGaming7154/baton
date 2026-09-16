@@ -25,6 +25,23 @@ data class DirectorConfig(
      */
     val guardMs: Long = DEFAULT_GUARD_MS,
     /**
+     * Silence that must pass, on the content clock, between the floor being released
+     * -- a speaker reporting, a pause, a withdrawal -- and the next scheduled
+     * utterance starting. Reactive speech does not wait for it; rule 1 is immediate.
+     *
+     * Not the same interval as [guardMs], which is charged against the room *ahead*
+     * of an utterance at admission and so only separates two voices when both were
+     * written into one window. Two voices of ours can still meet end to start: a
+     * subtitle that ends, and a description booked right behind it, in the same
+     * synthetic voice. On the target hardware the log put that handoff at 47 ms,
+     * and by ear it passed for one voice running over another. This is the air between
+     * them, whatever window each was written for.
+     *
+     * 300 ms is chosen, not measured -- a calibration knob, to be tuned by ear on
+     * the device. Zero reproduces the director as it was before it existed.
+     */
+    val interUtteranceGapMs: Long = DEFAULT_INTER_UTTERANCE_GAP_MS,
+    /**
      * Attenuation applied to the content when there is no measurement to compute
      * one from -- before the loudness meter has filled its first window, or after
      * a seek has emptied it.
@@ -166,6 +183,7 @@ data class DirectorConfig(
 ) {
     init {
         require(guardMs >= 0) { "guardMs must be >= 0, was $guardMs" }
+        require(interUtteranceGapMs >= 0) { "interUtteranceGapMs must be >= 0, was $interUtteranceGapMs" }
         require(duckDb < 0.0) { "duckDb must attenuate; $duckDb dB does not" }
         require(maxDuckDb < 0.0) { "maxDuckDb must attenuate; $maxDuckDb dB does not" }
         require(duckDb >= maxDuckDb) {
@@ -196,6 +214,10 @@ data class DirectorConfig(
 
     companion object {
         const val DEFAULT_GUARD_MS: Long = 250L
+
+        /** Chosen, not measured; a calibration knob. See [interUtteranceGapMs]. */
+        const val DEFAULT_INTER_UTTERANCE_GAP_MS: Long = 300L
+
         const val DEFAULT_DUCK_DB: Double = -12.0
 
         /** Amazon Prime Video and Netflix both specify -27 LKFS, +-2 LU, for description narration. */

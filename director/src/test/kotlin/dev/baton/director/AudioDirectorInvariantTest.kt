@@ -110,6 +110,7 @@ class AudioDirectorInvariantTest : FunSpec({
  */
 private val IMPATIENT = DirectorConfig(
     guardMs = 0,
+    interUtteranceGapMs = 120,
     duckDb = -6.0,
     speechTimeoutSlackMs = 300,
     unmeasuredSpeechCeilingMs = 900,
@@ -364,6 +365,9 @@ private class Invariants(
     private var baselinePositionMs = 0L
     private var ticked = false
 
+    /** Content position of the last floor release seen in the stream since the last seek. */
+    private var releasedAtPositionMs: Long? = null
+
     fun check(
         step: Int,
         nowMs: Long,
@@ -399,6 +403,7 @@ private class Invariants(
             checkSeekLeavesSilence(directive, events)
             checkDisclosure(directive, positionMs, events)
             checkBookings(directive)
+            checkInterUtteranceGap(directive, positionMs, seeked)
         }
         // After the checks: the tick that withdraws the disclosure names nothing, so
         // it is the following ticks that must not name it again.
@@ -615,6 +620,34 @@ private class Invariants(
             withClue("${speaking.id} took the floor from subtitle ${booking.id}, due at ${booking.startMs} and still unspoken") {
                 stillDue shouldBe false
             }
+        }
+    }
+
+    /**
+     * Every scheduled start is at least [DirectorConfig.interUtteranceGapMs] of
+     * content after the previous floor release, unless a seek came in between.
+     *
+     * Read off the stream: the floor is released on any tick where the utterance
+     * named last tick is no longer the one named, a preemption included. Counting a
+     * preemption is stricter than the director needs -- a reactive voice that takes
+     * the floor holds it until its own release, which then replaces this one -- and
+     * it means a scheduled voice handed straight to another is caught too.
+     */
+    private fun checkInterUtteranceGap(directive: Directive, positionMs: Long, seeked: Boolean) {
+        val before = previous?.speaking as? Speaking.Utterance
+        val after = directive.speaking as? Speaking.Utterance
+        val sameInstance = before != null && after != null &&
+            before.id == after.id && before.startedAtMs == after.startedAtMs
+        if (seeked) {
+            releasedAtPositionMs = null
+        } else if (before != null && !sameInstance) {
+            releasedAtPositionMs = positionMs
+        }
+
+        if (after !is Speaking.ScheduledUtterance || sameInstance) return
+        val released = releasedAtPositionMs ?: return
+        withClue("${after.id} started ${positionMs - released} ms after the floor was released at $released") {
+            (positionMs >= released + config.interUtteranceGapMs) shouldBe true
         }
     }
 

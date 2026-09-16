@@ -94,8 +94,9 @@ class AudioDirectorPolicyTest : FunSpec({
             .kind shouldBe UtteranceKind.Scheduled.SPOKEN_SUBTITLE
 
         // The description is not dropped -- it simply waits, and takes what is
-        // left of the same gap once the subtitle has finished.
-        session.playTo(2_000).speaking
+        // left of the same gap once the subtitle has finished and the
+        // inter-utterance gap has run.
+        session.playTo(2_300).speaking
             .shouldBeInstanceOf<Speaking.ScheduledUtterance>()
             .kind shouldBe UtteranceKind.Scheduled.AUDIO_DESCRIPTION
 
@@ -558,8 +559,8 @@ class AudioDirectorPolicyTest : FunSpec({
             .withdrawal.reason shouldBe WithdrawalReason.OutOfSilence(windowEndMs = 3_000)
         withdrawn.drops.shouldBeEmpty()
 
-        // On the following tick, with the floor genuinely empty, it starts.
-        session.tick(50).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("next")
+        // Once the floor is genuinely empty and the inter-utterance gap has run, it starts.
+        session.tick(300).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("next")
     }
 
     test("a scheduled utterance that cannot be constructed inside its window is not a runtime problem") {
@@ -623,7 +624,8 @@ class AudioDirectorPolicyTest : FunSpec({
         session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("desc")
 
         session.playTo(1_500)
-        session.speakerReports(UtteranceId("cue:desc")).speaking
+        session.speakerReports(UtteranceId("cue:desc")).speaking shouldBe Speaking.Silent
+        session.playTo(1_800).speaking
             .shouldBeInstanceOf<Speaking.ScheduledUtterance>()
             .cueId shouldBe CueId("next")
 
@@ -958,7 +960,7 @@ class AudioDirectorPolicyTest : FunSpec({
         // The description came due at 1500 and waits for the floor, as it would
         // behind any voice; it is not cut in, and it is not dropped.
         session.playTo(2_900).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().id shouldBe told.id
-        session.playTo(3_000).speaking
+        session.playTo(3_300).speaking
             .shouldBeInstanceOf<Speaking.ScheduledUtterance>()
             .cueId shouldBe CueId("desc")
 
@@ -1071,7 +1073,7 @@ class AudioDirectorPolicyTest : FunSpec({
     test("a description squeezed out while the disclosure speaks is dropped with the disclosure named as the holder") {
         val session = Session(
             trackOf(
-                gaps = listOf(Gap(1_000, 4_000)),
+                gaps = listOf(Gap(1_000, 4_500)),
                 cues = listOf(
                     // Its room runs out at 2000, where "later" starts.
                     cue("desc", startMs = 1_200, variants = listOf(variant("A gate swings shut.", 1_000))),
@@ -1159,7 +1161,7 @@ class AudioDirectorPolicyTest : FunSpec({
         subtitle.roomEndMs shouldBe 20_000
 
         session.playTo(2_900).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("sub")
-        session.playTo(3_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("desc")
+        session.playTo(3_300).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("desc")
         session.history.allDrops().shouldBeEmpty()
     }
 
@@ -1216,9 +1218,9 @@ class AudioDirectorPolicyTest : FunSpec({
         session.playTo(1_400).speaking shouldBe Speaking.Silent
 
         session.playTo(1_500).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("sub")
-        val told = session.playTo(2_500).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        val told = session.playTo(2_800).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
         told.id shouldBe AudioDirector.DISCLOSURE_ID
-        told.startedAtPositionMs shouldBe 2_500
+        told.startedAtPositionMs shouldBe 2_800
         told.roomEndMs shouldBe 20_000
 
         session.playTo(10_000)
@@ -1244,13 +1246,98 @@ class AudioDirectorPolicyTest : FunSpec({
 
         // Both fit the silence that opens at 1000. The subtitle's booking begins there.
         session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("sub")
-        session.playTo(2_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().id shouldBe
+        session.playTo(2_300).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().id shouldBe
             AudioDirector.DISCLOSURE_ID
 
         session.playTo(10_000)
         session.history.scheduledStarts().map { it.id } shouldBe listOf(UtteranceId("cue:sub"), AudioDirector.DISCLOSURE_ID)
     }
+
+    // -----------------------------------------------------------------------
+    // The inter-utterance gap.
+    //
+    // On the device a spoken subtitle ended and a description started 47 ms
+    // later, in the same synthetic voice, and it was heard as one voice running
+    // over another. Scheduled starts now wait for the gap after any release.
+    // -----------------------------------------------------------------------
+
+    test("a cue due 47 ms after the previous voice ends waits for the gap, then starts") {
+        val session = Session(handoffTrack(windowEndMs = 20_000, descriptionMs = 1_000))
+
+        session.playTo(1_000).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("s10")
+        // The speaker reports at 2000; the description is due at 2047.
+        session.playTo(2_047).speaking shouldBe Speaking.Silent
+        session.playTo(2_299, stepMs = 1).speaking shouldBe Speaking.Silent
+
+        val started = session.tick(1).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        started.cueId shouldBe CueId("d2")
+        started.startedAtPositionMs shouldBe 2_000 + DirectorConfig.DEFAULT_INTER_UTTERANCE_GAP_MS
+        session.history.allDrops().shouldBeEmpty()
+    }
+
+    test("a cue the gap costs its room is dropped with the ordinary reason, and with no gap it would have spoken") {
+        // 300 ms of description plus the guard fits the 553 ms left at 2047, where the
+        // gap holds it back, and not the 453 ms left at the next tick, 2147, still inside it.
+        val track = handoffTrack(windowEndMs = 2_600, descriptionMs = 300)
+
+        val session = Session(track)
+        session.playTo(2_047)
+        session.playTo(2_600)
+        session.history.spokenCueIds() shouldBe listOf(CueId("s10"))
+        session.history.allDrops().single().reason shouldBe DropReason.NoVariantFits(
+            shortestVariantMs = 300,
+            availableMs = 453,
+            guardMs = DirectorConfig.DEFAULT_GUARD_MS,
+            floorHeldBy = null,
+        )
+
+        val ungapped = Session(track, DirectorConfig(interUtteranceGapMs = 0))
+        ungapped.playTo(2_047)
+        ungapped.playTo(2_600)
+        ungapped.history.spokenCueIds() shouldBe listOf(CueId("s10"), CueId("d2"))
+        ungapped.history.scheduledStarts().last().startedAtPositionMs shouldBe 2_047
+    }
+
+    test("a button press straight after a release is answered at once; only scheduled speech waits") {
+        val session = Session(handoffTrack(windowEndMs = 20_000, descriptionMs = 1_000))
+
+        session.playTo(2_000).speaking shouldBe Speaking.Silent
+        val answer = session.press(uiNarration("ui", "Pause", millis = 500)).speaking
+        answer.shouldBeInstanceOf<Speaking.ReactiveUtterance>().id shouldBe UtteranceId("ui")
+
+        // The answer's own release at 2500 is a release like any other.
+        session.playTo(2_700).speaking shouldBe Speaking.Silent
+        session.playTo(2_800).speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>().cueId shouldBe CueId("d2")
+    }
+
+    test("a seek clears the gap, so the first cue at the new position is not held back by it") {
+        val session = Session(handoffTrack(windowEndMs = 20_000, descriptionMs = 1_000))
+
+        session.playTo(2_000)
+        // Back over the subtitle, inside what would still be the gap from 2000.
+        session.seekTo(1_000).speaking shouldBe Speaking.Silent
+        val replayed = session.tick().speaking.shouldBeInstanceOf<Speaking.ScheduledUtterance>()
+        replayed.cueId shouldBe CueId("s10")
+        replayed.startedAtPositionMs shouldBe 1_100
+    }
 })
+
+/**
+ * The handoff from the device log: subtitle s10 speaks from 1000 to 2000, and
+ * description d2 is due 47 ms after it ends, in a silence ending at [windowEndMs].
+ */
+private fun handoffTrack(windowEndMs: Long, descriptionMs: Long): DescriptionTrack = trackOf(
+    gaps = listOf(Gap(0, windowEndMs)),
+    cues = listOf(
+        cue(
+            "s10",
+            startMs = 1_000,
+            kind = UtteranceKind.Scheduled.SPOKEN_SUBTITLE,
+            variants = listOf(variant("Where have you been?", 1_000)),
+        ),
+        cue("d2", startMs = 2_047, variants = listOf(variant("She turns away.", descriptionMs))),
+    ),
+)
 
 /**
  * One description, comfortably inside a long silence, three seconds long and due
