@@ -4,7 +4,8 @@ import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -77,7 +78,7 @@ object TitleDescriptions {
  * to sit at the same prominence as play and pause, which is why they are one
  * D-pad press below the transport bar rather than inside a settings tree.
  *
- * It is the second [Row] of `TransportBar`'s [androidx.compose.foundation.layout.Column],
+ * It is the second row of `TransportBar`'s [androidx.compose.foundation.layout.Column],
  * so Down from a transport button lands here and Up goes back; Compose's
  * two-dimensional focus search does the moving, and the app binds no key for it
  * (see `RemoteBindings`).
@@ -93,7 +94,12 @@ object TitleDescriptions {
  * (FocusChangedModifier.kt:42-44, 56-60) and focus does not move when a toggle
  * flips. The press is announced by the caller that owns the state, the way
  * `MainActivity.togglePlayback` already announces Play/Pause.
+ *
+ * A [FlowRow], not a Row: six labels are wider than a 1920 px screen, and on the
+ * Stick a Row squeezed "Screen curtain: off" into a one-letter-wide column. Wrapping
+ * keeps every label whole; Down still reaches the first line.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AccessServicesRow(
     on: Set<AccessService>,
@@ -101,7 +107,11 @@ fun AccessServicesRow(
     announce: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    FlowRow(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
         for (service in AccessService.entries) {
             AccessToggle(service, service in on, onToggle, announce)
         }

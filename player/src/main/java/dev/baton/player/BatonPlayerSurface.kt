@@ -32,7 +32,7 @@ fun BatonPlayerSurface(
             PlayerView(context).apply {
                 player = exoPlayer
                 useController = false
-                // Lifts captions clear of the two-row TransportBar, which is always on
+                // Lifts captions clear of the TransportBar, which is always on
                 // screen; Media3's 0.08 default put them under its buttons on the Stick.
                 subtitleView?.setBottomPaddingFraction(CAPTION_BOTTOM_FRACTION)
             }
@@ -41,5 +41,8 @@ fun BatonPlayerSurface(
     )
 }
 
-/** Calibrated by screenshot on the Stick at 1080p; the bar's top edge sits at 824 px. */
-private const val CAPTION_BOTTOM_FRACTION = 0.26f
+/**
+ * Calibrated by screenshot on the Stick at 1080p. The access row wraps onto a second
+ * line, so the bar's top edge sits at 708 px; at 0.31 a two-line caption's box ends at 695.
+ */
+private const val CAPTION_BOTTOM_FRACTION = 0.31f
