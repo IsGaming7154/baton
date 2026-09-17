@@ -109,6 +109,23 @@ interface Drafting {
     fun draft(request: DraftRequest): Draft?
 }
 
+/** The tokens a model call reports it billed: Bedrock's `usage.inputTokens` and `usage.outputTokens`. */
+data class BilledTokens(val inputTokens: Int, val outputTokens: Int) {
+    init {
+        require(inputTokens >= 0 && outputTokens >= 0) { "billed tokens must be >= 0, were $inputTokens/$outputTokens" }
+    }
+}
+
+/**
+ * A [Drafting] adapter that reports what its last call billed, whether or not that call
+ * produced a [Draft] -- a refused or unparseable reply is billed too, which is why this is
+ * not a field on [Draft]. [SpendGuard] settles its pre-call estimate against it.
+ */
+interface ReportsBilledTokens {
+    /** What the most recent [Drafting.draft] call billed; null when it reported nothing. */
+    val lastBilledTokens: BilledTokens?
+}
+
 /** What a live [Drafting] adapter tells the model, beside the [DraftRequest] itself. */
 object DraftingPrompt {
 

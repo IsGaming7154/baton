@@ -69,6 +69,19 @@ data class SpendConfig(
             "Nova token figures must be positive"
         }
     }
+
+    /**
+     * The worst case [SpendGuard] charges for one Nova call over media this long: the whole
+     * clip's video tokens (whole seconds, rounded up) plus the text allowance in, and
+     * [novaMaxOutputTokens] out.
+     */
+    fun novaCallEstimateUsd(mediaDurationMs: Long): Double {
+        val inputTokens = ceil(mediaDurationMs / 1_000.0).toLong() * novaVideoTokensPerSecond + novaTextTokenAllowance
+        return novaUsd(inputTokens, novaMaxOutputTokens.toLong())
+    }
+
+    fun novaUsd(inputTokens: Long, outputTokens: Long): Double =
+        (inputTokens * novaPrice.inputUsdPerMillionTokens + outputTokens * novaPrice.outputUsdPerMillionTokens) / 1_000_000
 }
 
 /** A paid call refused before it was made, or a run refused because its spend so far cannot be known. */
@@ -99,11 +112,11 @@ data class ServiceSpend(val calls: Int, val estimatedUsd: Double, val recordedUs
  * guard, and the cumulative total is read from, and kept in, the ledger.
  *
  * What is recorded is the estimate, until the call comes back reporting its billed usage --
- * only Polly does, as [RenderedAudio.requestCharacters] -- and then that usage replaces the
+ * Polly as [RenderedAudio.requestCharacters], Nova as [ReportsBilledTokens] -- and then that usage replaces the
  * estimate, in the ledger too. A port marked [Unbilled] records $0, and is still counted and
  * checked.
  */
-class SpendGuard(private val config: SpendConfig, mediaDurationMs: Long) {
+class SpendGuard(private val config: SpendConfig, private val mediaDurationMs: Long) {
 
     init {
         require(mediaDurationMs > 0) { "mediaDurationMs must be > 0, was $mediaDurationMs" }
@@ -131,15 +144,21 @@ class SpendGuard(private val config: SpendConfig, mediaDurationMs: Long) {
         }
     }
 
-    /** Every draft call sends the whole clip (see [SceneContext.media]), so each is priced for all of it. */
+    /**
+     * Every draft call sends the whole clip (see [SceneContext.media]), so each is priced for all
+     * of it. A port that reports its billed tokens ([ReportsBilledTokens]) is settled against
+     * them, draft or no draft.
+     */
     fun guarded(port: Drafting): Drafting = object : Drafting {
         override fun draft(request: DraftRequest): Draft? {
-            val inputTokens = mediaSeconds * config.novaVideoTokensPerSecond + config.novaTextTokenAllowance
-            val price = config.novaPrice
-            val estimateUsd = (inputTokens * price.inputUsdPerMillionTokens +
-                config.novaMaxOutputTokens * price.outputUsdPerMillionTokens) / 1_000_000
+            val estimateUsd = config.novaCallEstimateUsd(mediaDurationMs)
             charge(Service.NOVA, estimateUsd, port)
-            return port.draft(request)
+            val draft = port.draft(request)
+            val billed = (port as? ReportsBilledTokens)?.lastBilledTokens
+            if (billed != null && port !is Unbilled) {
+                settle(Service.NOVA, estimateUsd, config.novaUsd(billed.inputTokens.toLong(), billed.outputTokens.toLong()))
+            }
+            return draft
         }
     }
 
@@ -249,7 +268,7 @@ class SpendGuard(private val config: SpendConfig, mediaDurationMs: Long) {
 /**
  * A run's report, written as JSON beside its track. `recordedUsd` is what went into the
  * ledger: $0 for an [Unbilled] port, otherwise the billed usage where the service reported
- * it (Polly) and the estimate where it did not.
+ * it (Polly, Nova) and the estimate where it did not.
  */
 @Serializable
 data class RunReport(

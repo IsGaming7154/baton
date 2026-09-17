@@ -39,6 +39,10 @@ dependencies {
     implementation("software.amazon.awssdk:s3:2.54.19") {
         exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
     }
+    // And for Bedrock Runtime: only the sync BedrockRuntimeClient's Converse is used.
+    implementation("software.amazon.awssdk:bedrockruntime:2.54.19") {
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+    }
 
     testImplementation("io.kotest:kotest-runner-junit5:5.9.1")
 }
@@ -59,6 +63,16 @@ tasks.register<JavaExec>("transcribeSmoke") {
     description = "Runs ONE paid Amazon Transcribe job through the spend guard and writes its raw output JSON."
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("dev.baton.pipeline.live.TranscribeSmokeKt")
+}
+
+// A live Nova drafting run over one clip: the real builder, a transcript from disk and simulated
+// synthesis, so only Nova is billed, each call through the spend guard (it prints the run's worst
+// case first). Never wired into build or test:
+//   gradlew :pipeline:novaSmoke --args=<media>,<transcript.json>,<model id>,<duration ms>,<out track.json>
+tasks.register<JavaExec>("novaSmoke") {
+    description = "Drafts a track with live Amazon Bedrock Nova calls through the spend guard."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.baton.pipeline.live.NovaSmokeKt")
 }
 
 tasks.withType<Test>().configureEach {

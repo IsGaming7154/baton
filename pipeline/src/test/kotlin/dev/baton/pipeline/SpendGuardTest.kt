@@ -84,14 +84,49 @@ class SpendGuardTest : FunSpec({
         Files.exists(ledger) shouldBe false
     }
 
-    test("the 151st Nova call of a run is refused") {
-        val nova = CountingDrafter()
-        val guarded = SpendGuard(SpendConfig(ledgerPath = freshLedger()), ONE_SECOND).guarded(nova)
-        val ask = DraftRequest(SceneContext(MediaRef("s3://baton/clip.mp4"), Gap(0, 3_000), "", ""), 2_000, 0)
+    test("the 151st Nova call of a run is refused, settled or not") {
+        for (billed in listOf(null, BilledTokens(100, 5))) {
+            val nova = CountingDrafter(billed)
+            val guarded = SpendGuard(SpendConfig(ledgerPath = freshLedger()), ONE_SECOND).guarded(nova)
 
-        repeat(150) { guarded.draft(ask) }
-        shouldThrow<SpendRefused> { guarded.draft(ask) }.message shouldContain "150 calls"
-        nova.calls shouldBe 150
+            repeat(150) { guarded.draft(novaAsk) }
+            shouldThrow<SpendRefused> { guarded.draft(novaAsk) }.message shouldContain "150 calls"
+            nova.calls shouldBe 150
+        }
+    }
+
+    test("the worst case of a Nova call is what the guard charges before it") {
+        // The demo clip: 88.6 s is 89 whole seconds of video tokens.
+        SpendConfig().novaCallEstimateUsd(88_600) shouldBe (((89 * 288 + 2_000) * 0.33 + 512 * 2.75) / 1e6 plusOrMinus 1e-12)
+    }
+
+    test("the tokens Nova reports billing replace the estimate, including for a call that produced no draft") {
+        val ledger = freshLedger()
+        val guard = SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND)
+        val guarded = guard.guarded(CountingDrafter(billed = BilledTokens(10_000, 100), draft = null))
+
+        guarded.draft(novaAsk) shouldBe null
+        // Nova 2 Lite: $0.33 per million in, $2.75 per million out.
+        val billedUsd = (10_000 * 0.33 + 100 * 2.75) / 1e6
+        guard.runUsd shouldBe (billedUsd plusOrMinus 1e-12)
+        SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND).cumulativeUsd shouldBe (billedUsd plusOrMinus 1e-12)
+        val nova = guard.report(ledger.resolveSibling("t.json"), PipelineConfig()).nova
+        nova.estimatedUsd shouldBe (((288 + 2_000) * 0.33 + 512 * 2.75) / 1e6 plusOrMinus 1e-12)
+        nova.recordedUsd shouldBe (billedUsd plusOrMinus 1e-12)
+    }
+
+    test("Nova billing over the estimate is recorded past the cap, and the next call is refused") {
+        val ledger = freshLedger()
+        // One call estimates at about $0.0022; a million input tokens bill $0.33, past a $0.01 cap.
+        val nova = CountingDrafter(billed = BilledTokens(1_000_000, 0))
+        val guard = SpendGuard(SpendConfig(perRunCapUsd = 0.01, ledgerPath = ledger), ONE_SECOND)
+        val guarded = guard.guarded(nova)
+
+        guarded.draft(novaAsk)
+        guard.runUsd shouldBe (0.33 plusOrMinus 1e-12)
+        SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND).cumulativeUsd shouldBe (0.33 plusOrMinus 1e-12)
+        shouldThrow<SpendRefused> { guarded.draft(novaAsk) }.message shouldContain "per-run cap"
+        nova.calls shouldBe 1
     }
 
     test("the ledger persists across runs, while each run's own cap starts again from zero") {
@@ -190,12 +225,19 @@ private open class CountingSynthesis(private val billedCharacters: Int? = null) 
     }
 }
 
-/** A billed stand-in for Nova, counting the calls that reached it. */
-private class CountingDrafter : Drafting {
-    var calls = 0
+private val novaAsk = DraftRequest(SceneContext(MediaRef("s3://baton/clip.mp4"), Gap(0, 3_000), "", ""), 2_000, 0)
 
-    override fun draft(request: DraftRequest): Draft {
+/** A billed stand-in for Nova, counting the calls that reached it and reporting [billed] as Converse's `usage` would. */
+private class CountingDrafter(
+    private val billed: BilledTokens? = null,
+    private val draft: Draft? = Draft("A woman kneels beside a fire."),
+) : Drafting, ReportsBilledTokens {
+    var calls = 0
+    override var lastBilledTokens: BilledTokens? = null
+
+    override fun draft(request: DraftRequest): Draft? {
         calls++
-        return Draft("A woman kneels beside a fire.")
+        lastBilledTokens = billed
+        return draft
     }
 }
