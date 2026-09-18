@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.media3.common.Player
 import androidx.tv.material3.Surface
 import dev.baton.director.AudioDirector
@@ -113,6 +114,9 @@ class MainActivity : ComponentActivity() {
 
     /** The prepared track's [DescriptionTrack.sourceId], which keys [TitleDescriptions]. Null until preparation returns one. */
     private var titleId: String? = null
+
+    /** Preparation finished while the activity was stopped; [onStart] starts playback instead. */
+    private var playbackDeferred = false
 
     /**
      * Whether another app's voice has the floor, as audio focus last reported it
@@ -283,20 +287,20 @@ class MainActivity : ComponentActivity() {
                 running.descriptionLength = descriptionLength()
                 running.externalVoice = externalVoice
                 player.onSeek(running::onSeek)
-                running.start()
             }
 
-            // Listening tests: `am start ... --el seekMs 39000 --el playForMs 9500`
-            // plays one snippet and stops, so a single cue can be heard on its own.
-            // Leave six seconds before the cue -- the meter resets on a seek and a
-            // cue that arrives before it refills is ducked by the static fallback.
-            val seekMs = intent.getLongExtra("seekMs", 0L)
-            if (seekMs > 0L) player.exoPlayer.seekTo(seekMs)
             trackReady = true
-            log("playback starting")
-            player.play()
-            val playForMs = intent.getLongExtra("playForMs", 0L)
-            if (playForMs > 0L) handler.postDelayed({ player.exoPlayer.playWhenReady = false }, playForMs)
+            // Preparation takes ~16 s, and the activity can be stopped by the time it
+            // returns -- launched under the screensaver, say, which stops it at once.
+            // Starting then played the film and every voice behind the screensaver,
+            // with audio focus already given back in onStop (Stick log, 2026-09-18).
+            // So a launch that finds the activity stopped waits for onStart instead.
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                startPlayback()
+            } else {
+                playbackDeferred = true
+                log("playback deferred reason=not-started")
+            }
         }
 
         // The row's phrases, rendered behind the film rather than in front of it
@@ -361,9 +365,29 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         requestAudioFocus()
+        if (playbackDeferred) {
+            playbackDeferred = false
+            startPlayback()
+            return
+        }
         val running = tracer ?: return
         running.start()
         announce(TransportNarration.state(player.exoPlayer.playWhenReady))
+    }
+
+    /** The launch's first start of the tracer and the film, whether preparation or [onStart] gets here first. */
+    private fun startPlayback() {
+        tracer?.start()
+        // Listening tests: `am start ... --el seekMs 39000 --el playForMs 9500`
+        // plays one snippet and stops, so a single cue can be heard on its own.
+        // Leave six seconds before the cue -- the meter resets on a seek and a
+        // cue that arrives before it refills is ducked by the static fallback.
+        val seekMs = intent.getLongExtra("seekMs", 0L)
+        if (seekMs > 0L) player.exoPlayer.seekTo(seekMs)
+        log("playback starting")
+        player.play()
+        val playForMs = intent.getLongExtra("playForMs", 0L)
+        if (playForMs > 0L) handler.postDelayed({ player.exoPlayer.playWhenReady = false }, playForMs)
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
