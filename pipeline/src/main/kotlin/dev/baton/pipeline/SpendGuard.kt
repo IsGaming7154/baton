@@ -88,6 +88,14 @@ data class SpendConfig(
 class SpendRefused(message: String) : IllegalStateException(message)
 
 /**
+ * A paid call the service rejected outright, before doing any billed work: "Operation not
+ * allowed", access denied, a bad request. A live adapter throws it with the service's own
+ * exception as [cause], and [SpendGuard] settles that call to $0 and lets it through unchanged.
+ * Anything else a call throws keeps its estimate, because whether it was billed is unknown.
+ */
+class ServiceRefused(message: String, cause: Throwable) : RuntimeException(message, cause)
+
+/**
  * A port whose calls cost nothing: a recorded fixture or a simulation. The [SpendGuard]
  * still counts and checks every call to one, and records it at $0 rather than at its
  * estimate.
@@ -113,8 +121,9 @@ data class ServiceSpend(val calls: Int, val estimatedUsd: Double, val recordedUs
  *
  * What is recorded is the estimate, until the call comes back reporting its billed usage --
  * Polly as [RenderedAudio.requestCharacters], Nova as [ReportsBilledTokens] -- and then that usage replaces the
- * estimate, in the ledger too. A port marked [Unbilled] records $0, and is still counted and
- * checked.
+ * estimate, in the ledger too. A call the service refused ([ServiceRefused]) is settled to $0
+ * the same way; one that fails any other way keeps its estimate. A port marked [Unbilled]
+ * records $0, and is still counted and checked.
  */
 class SpendGuard(private val config: SpendConfig, private val mediaDurationMs: Long) {
 
@@ -139,8 +148,8 @@ class SpendGuard(private val config: SpendConfig, private val mediaDurationMs: L
 
     fun guarded(port: Transcription): Transcription = object : Transcription {
         override fun transcribe(media: MediaRef): Transcript {
-            charge(Service.TRANSCRIBE, mediaSeconds * AwsPrices.TRANSCRIBE_BATCH_USD_PER_SECOND, port)
-            return port.transcribe(media).also { transcriptLocale = it.locale }
+            val estimateUsd = mediaSeconds * AwsPrices.TRANSCRIBE_BATCH_USD_PER_SECOND
+            return paid(Service.TRANSCRIBE, estimateUsd, port) { port.transcribe(media) }.also { transcriptLocale = it.locale }
         }
     }
 
@@ -152,8 +161,7 @@ class SpendGuard(private val config: SpendConfig, private val mediaDurationMs: L
     fun guarded(port: Drafting): Drafting = object : Drafting {
         override fun draft(request: DraftRequest): Draft? {
             val estimateUsd = config.novaCallEstimateUsd(mediaDurationMs)
-            charge(Service.NOVA, estimateUsd, port)
-            val draft = port.draft(request)
+            val draft = paid(Service.NOVA, estimateUsd, port) { port.draft(request) }
             val billed = (port as? ReportsBilledTokens)?.lastBilledTokens
             if (billed != null && port !is Unbilled) {
                 settle(Service.NOVA, estimateUsd, config.novaUsd(billed.inputTokens.toLong(), billed.outputTokens.toLong()))
@@ -170,8 +178,7 @@ class SpendGuard(private val config: SpendConfig, private val mediaDurationMs: L
                 else -> refuse("no Polly price is on record for the '${voice.engine}' engine, so its calls cannot be estimated")
             }
             val estimateUsd = text.length * perCharacter
-            charge(Service.POLLY, estimateUsd, port)
-            val audio = port.synthesize(text, voice)
+            val audio = paid(Service.POLLY, estimateUsd, port) { port.synthesize(text, voice) }
             val billed = audio.requestCharacters
             if (billed != null && port !is Unbilled) settle(Service.POLLY, estimateUsd, billed * perCharacter)
             return audio
@@ -200,6 +207,20 @@ class SpendGuard(private val config: SpendConfig, private val mediaDurationMs: L
             novaCalls = spend.getValue(Service.NOVA).calls,
         ),
     )
+
+    /**
+     * [charge], then make the [call]. One the service refused is settled to $0 and rethrown as it
+     * came; it stays counted, so it still counts toward the Nova call cap.
+     */
+    private inline fun <T> paid(service: Service, estimateUsd: Double, port: Any, call: () -> T): T {
+        charge(service, estimateUsd, port)
+        try {
+            return call()
+        } catch (e: ServiceRefused) {
+            if (port !is Unbilled) settle(service, estimateUsd, 0.0)
+            throw e
+        }
+    }
 
     private fun charge(service: Service, estimateUsd: Double, port: Any) {
         val before = spend.getValue(service)
@@ -267,8 +288,8 @@ class SpendGuard(private val config: SpendConfig, private val mediaDurationMs: L
 
 /**
  * A run's report, written as JSON beside its track. `recordedUsd` is what went into the
- * ledger: $0 for an [Unbilled] port, otherwise the billed usage where the service reported
- * it (Polly, Nova) and the estimate where it did not.
+ * ledger: $0 for an [Unbilled] port or a call the service refused, otherwise the billed usage
+ * where the service reported it (Polly, Nova) and the estimate where it did not.
  */
 @Serializable
 data class RunReport(

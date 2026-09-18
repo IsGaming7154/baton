@@ -89,7 +89,7 @@ class NovaDrafting(
 
     override fun draft(request: DraftRequest): Draft? {
         lastBilledTokens = null
-        val response = client.converse(converseRequest(request))
+        val response = refusalsTranslated("Bedrock Converse on $modelId") { client.converse(converseRequest(request)) }
         calls++
         response.usage()?.let { usage ->
             val billed = BilledTokens(usage.inputTokens(), usage.outputTokens())

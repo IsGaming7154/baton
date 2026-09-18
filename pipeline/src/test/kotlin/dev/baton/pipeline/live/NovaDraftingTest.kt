@@ -7,10 +7,13 @@ import dev.baton.pipeline.DraftRequest
 import dev.baton.pipeline.DraftingPrompt
 import dev.baton.pipeline.MediaRef
 import dev.baton.pipeline.SceneContext
+import dev.baton.pipeline.ServiceRefused
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import software.amazon.awssdk.awscore.exception.AwsServiceException
 import software.amazon.awssdk.services.bedrockruntime.BedrockRuntimeClient
 import software.amazon.awssdk.services.bedrockruntime.model.ContentBlock
 import software.amazon.awssdk.services.bedrockruntime.model.ConversationRole
@@ -103,6 +106,22 @@ class NovaDraftingTest : FunSpec({
         shouldThrow<IllegalArgumentException> { NovaDrafting("m", text, FakeBedrock(reply(""))) }
     }
 
+    test("only a 4xx that proves the request never ran becomes ServiceRefused; the rest pass through as they came") {
+        for (status in listOf(400, 403, 404)) {
+            val rejection = AwsServiceException.builder().statusCode(status).message("Operation not allowed").build()
+            withClue("status $status") {
+                shouldThrow<ServiceRefused> { NovaDrafting("m", clip(), FakeBedrock(reply(""), rejection)).draft(ask) }.cause shouldBe rejection
+            }
+        }
+        // 408 and 424 are raised while the model runs, 429 is throttling, 5xx is the service's own failure.
+        for (status in listOf(408, 424, 429, 500, 503)) {
+            val failure = AwsServiceException.builder().statusCode(status).message("failed").build()
+            withClue("status $status") {
+                shouldThrow<AwsServiceException> { NovaDrafting("m", clip(), FakeBedrock(reply(""), failure)).draft(ask) } shouldBe failure
+            }
+        }
+    }
+
     test("closing the adapter closes the client") {
         val bedrock = FakeBedrock(reply(""))
         NovaDrafting("m", clip(), bedrock).close()
@@ -120,12 +139,13 @@ private fun reply(text: String, input: Int = 100, output: Int = 5, stop: StopRea
         .usage(TokenUsage.builder().inputTokens(input).outputTokens(output).totalTokens(input + output).build())
         .build()
 
-private class FakeBedrock(private val response: ConverseResponse) : BedrockRuntimeClient {
+private class FakeBedrock(private val response: ConverseResponse, private val failure: RuntimeException? = null) : BedrockRuntimeClient {
     val requests = mutableListOf<ConverseRequest>()
     var closed = false
 
     override fun converse(request: ConverseRequest): ConverseResponse {
         requests += request
+        if (failure != null) throw failure
         return response
     }
 

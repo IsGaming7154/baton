@@ -78,17 +78,20 @@ class TranscribeTranscription(
         val outputKey = "baton/$id.json"
         val jobName = "baton-$id"
         try {
-            s3.putObject(PutObjectRequest.builder().bucket(bucket).key(mediaKey).build(), RequestBody.fromFile(file))
-            transcribe.startTranscriptionJob(
-                StartTranscriptionJobRequest.builder()
-                    .transcriptionJobName(jobName)
-                    .media(Media.builder().mediaFileUri("s3://$bucket/$mediaKey").build())
-                    .mediaFormat(format)
-                    .languageCode(languageCode)
-                    .outputBucketName(bucket)
-                    .outputKey(outputKey)
-                    .build(),
-            )
+            // Refused only up to here: once the job has started it may be billed, whatever fails after.
+            refusalsTranslated("Transcribe job $jobName") {
+                s3.putObject(PutObjectRequest.builder().bucket(bucket).key(mediaKey).build(), RequestBody.fromFile(file))
+                transcribe.startTranscriptionJob(
+                    StartTranscriptionJobRequest.builder()
+                        .transcriptionJobName(jobName)
+                        .media(Media.builder().mediaFileUri("s3://$bucket/$mediaKey").build())
+                        .mediaFormat(format)
+                        .languageCode(languageCode)
+                        .outputBucketName(bucket)
+                        .outputKey(outputKey)
+                        .build(),
+                )
+            }
             awaitCompletion(jobName)
             val json = s3.getObjectAsBytes(GetObjectRequest.builder().bucket(bucket).key(outputKey).build()).asUtf8String()
             lastOutputJson = json

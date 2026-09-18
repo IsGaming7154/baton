@@ -37,7 +37,7 @@ class PollySynthesis(
             .engine(voice.engine)
             .sampleRate(voice.sampleRateHz.toString())
             .build()
-        val response = client.synthesizeSpeechAsBytes(request)
+        val response = refusalsTranslated("Polly SynthesizeSpeech") { client.synthesizeSpeechAsBytes(request) }
         return RenderedAudio.ofPcm16Mono(
             response.asByteArray(),
             voice.sampleRateHz,

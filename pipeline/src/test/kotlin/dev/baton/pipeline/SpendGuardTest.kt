@@ -129,6 +129,38 @@ class SpendGuardTest : FunSpec({
         nova.calls shouldBe 1
     }
 
+    test("a call the service refused settles to \$0 and is rethrown as it came, but is still counted") {
+        val ledger = freshLedger().apply { writeText("""{"spentUsd":0.5}""") }
+        val guard = SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND)
+        val refusal = ServiceRefused("Operation not allowed", RuntimeException("Status Code: 400"))
+        val nova = CountingDrafter(refuseWith = refusal)
+
+        // Three refused Nova calls, as on the account not yet cleared for Bedrock.
+        repeat(3) { shouldThrow<ServiceRefused> { guard.guarded(nova).draft(novaAsk) } shouldBe refusal }
+        shouldThrow<ServiceRefused> { guard.guarded(RefusingTranscription(refusal)).transcribe(MediaRef("clip.mp4")) }
+        shouldThrow<ServiceRefused> { guard.guarded(CountingSynthesis(refuseWith = refusal)).synthesize(thousandCharacters, voice) }
+
+        guard.runUsd shouldBe (0.0 plusOrMinus 1e-12)
+        SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND).cumulativeUsd shouldBe (0.5 plusOrMinus 1e-12)
+        val report = guard.report(ledger.resolveSibling("t.json"), PipelineConfig())
+        report.nova.calls shouldBe 3
+        report.nova.estimatedUsd shouldBe (3 * SpendConfig().novaCallEstimateUsd(ONE_SECOND) plusOrMinus 1e-12)
+        listOf(report.transcribe, report.nova, report.polly).map { it.recordedUsd } shouldBe listOf(0.0, 0.0, 0.0)
+    }
+
+    test("a call that fails any other way keeps its estimate, since it may have been billed") {
+        val ledger = freshLedger()
+        val guard = SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND)
+
+        // A 5xx, a timeout or a dropped connection: the adapters let these through untranslated.
+        shouldThrow<IllegalStateException> {
+            guard.guarded(CountingSynthesis(refuseWith = IllegalStateException("Status Code: 500"))).synthesize(thousandCharacters, voice)
+        }
+
+        guard.runUsd shouldBe (0.016 plusOrMinus 1e-12)
+        SpendGuard(SpendConfig(ledgerPath = ledger), ONE_SECOND).cumulativeUsd shouldBe (0.016 plusOrMinus 1e-12)
+    }
+
     test("the ledger persists across runs, while each run's own cap starts again from zero") {
         val config = SpendConfig(perRunCapUsd = 0.02, ledgerPath = freshLedger())
 
@@ -216,11 +248,15 @@ private fun freshLedger(): Path = Files.createTempDirectory("baton-spend").resol
  * A billed stand-in for Polly: priced as Polly, counting the calls that reached it, and
  * reporting [billedCharacters] as Polly's `x-amzn-RequestCharacters` would.
  */
-private open class CountingSynthesis(private val billedCharacters: Int? = null) : Synthesis {
+private open class CountingSynthesis(
+    private val billedCharacters: Int? = null,
+    private val refuseWith: RuntimeException? = null,
+) : Synthesis {
     var calls = 0
 
     override fun synthesize(text: String, voice: VoiceSpec): RenderedAudio {
         calls++
+        if (refuseWith != null) throw refuseWith
         return RenderedAudio.ofPcm16Mono(ByteArray(3_200), voice.sampleRateHz, requestCharacters = billedCharacters)
     }
 }
@@ -231,6 +267,7 @@ private val novaAsk = DraftRequest(SceneContext(MediaRef("s3://baton/clip.mp4"),
 private class CountingDrafter(
     private val billed: BilledTokens? = null,
     private val draft: Draft? = Draft("A woman kneels beside a fire."),
+    private val refuseWith: RuntimeException? = null,
 ) : Drafting, ReportsBilledTokens {
     var calls = 0
     override var lastBilledTokens: BilledTokens? = null
@@ -238,6 +275,11 @@ private class CountingDrafter(
     override fun draft(request: DraftRequest): Draft? {
         calls++
         lastBilledTokens = billed
+        if (refuseWith != null) throw refuseWith
         return draft
     }
+}
+
+private class RefusingTranscription(private val refusal: RuntimeException) : Transcription {
+    override fun transcribe(media: MediaRef): Transcript = throw refusal
 }
