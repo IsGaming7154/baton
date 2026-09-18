@@ -37,6 +37,13 @@ internal class Step(
     /** The speaker takes this utterance and never reports on it again. */
     val speakerStalls: Boolean,
     val reportPhantomEnd: Boolean,
+    /**
+     * Another app's voice has the floor (VoiceView). Level state, drawn in windows a
+     * few ticks long the way a stall is, because a screen-reader sentence outlasts a
+     * tick and the interesting cases -- a cue coming due under it, a press refused
+     * inside it, a pause or seek landing in it -- need it to.
+     */
+    val externalVoice: Boolean,
 )
 
 internal class Scenario(val track: DescriptionTrack, val steps: List<Step>, val disclosure: Variant?)
@@ -217,6 +224,7 @@ private fun randomRequest(random: Random, step: Int, ordinal: Int): ReactiveRequ
  */
 private fun randomSteps(random: Random): List<Step> {
     var stallTicksLeft = 0
+    var voiceTicksLeft = 0
     return List(random.nextInt(8, 90)) { index ->
         Step(
             dtMs = when (random.nextInt(10)) {
@@ -261,6 +269,17 @@ private fun randomSteps(random: Random): List<Step> {
             reportSpeechEnded = random.nextInt(8) == 0,
             speakerStalls = random.nextInt(4) == 0,
             reportPhantomEnd = random.nextInt(20) == 0,
+            externalVoice = when {
+                voiceTicksLeft > 0 -> {
+                    voiceTicksLeft--
+                    true
+                }
+                random.nextInt(40) == 0 -> {
+                    voiceTicksLeft = random.nextInt(0, 6)
+                    true
+                }
+                else -> false
+            },
         )
     }
 }

@@ -257,6 +257,16 @@ sealed interface DropReason {
 
     /** The cue arrived with no length variants at all, so there was nothing to say. */
     data object NoVariants : DropReason
+
+    /**
+     * The cue came due while another app's voice had the floor
+     * ([DirectorInputs.externalVoice]). Reported rather than passed over silently
+     * like a silenced kind, because nobody here switched it off: the viewer asked
+     * for this description and did not get it, and the log is where that has to be
+     * legible. Not queued for later either -- by the time the other voice stops, the
+     * moment it describes has gone.
+     */
+    data object YieldedToExternalVoice : DropReason
 }
 
 /** A cue the director decided not to speak, and why. */
@@ -387,6 +397,14 @@ data class Directive(
     val contentDuck: ContentDuck,
     val drops: List<DroppedCue> = emptyList(),
     val stall: PlaybackStall? = null,
+    /**
+     * Reactive requests turned away on this tick, because another app's voice had
+     * the floor ([DirectorInputs.externalVoice]). An edge like [drops], and for the
+     * same reason: a button press that is not answered should read as a decision.
+     * Refused, not deferred -- "Play, button" heard two seconds late describes a
+     * press the viewer has already moved on from.
+     */
+    val refused: List<ReactiveRequest> = emptyList(),
 ) {
     /**
      * The floor taken back from an utterance on this tick, if it was.

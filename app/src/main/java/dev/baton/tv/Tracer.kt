@@ -75,6 +75,14 @@ class Tracer(
     /** The row's description length, handed over the same way as [silencedKinds]; see [DirectorInputs.descriptionLength]. */
     var descriptionLength: DescriptionLength = DescriptionLength.LONG
 
+    /**
+     * Whether another app's voice has the floor -- VoiceView, seen as a loss of audio
+     * focus -- handed over the same way as [silencedKinds]; see
+     * [DirectorInputs.externalVoice]. Written from the focus listener, which runs on
+     * the main looper because no handler was given to the request.
+     */
+    var externalVoice: Boolean = false
+
     private var speaking: Speaking.Utterance? = null
     private var duck: ContentDuck = ContentDuck.Unity
     private var running = false
@@ -138,9 +146,15 @@ class Tracer(
                 programmeLufs = programmeLufs,
                 silencedKinds = silencedKinds,
                 descriptionLength = descriptionLength,
+                externalVoice = externalVoice,
             ),
         )
 
+        // The same line MainActivity writes when a press cannot be answered, so every
+        // unanswered press reads alike whoever turned it away.
+        directive.refused.forEach {
+            log("reactive unavailable id=${it.id} kind=${it.kind} phrase=\"${it.text}\" reason=external-voice")
+        }
         directive.drops.forEach {
             log("cue dropped id=${it.cueId} kind=${it.kind} atPositionMs=${it.atPositionMs} reason=${it.reason}")
         }
@@ -221,6 +235,7 @@ class Tracer(
 
     private fun releaseCause(directive: Directive, events: List<InputEvent>, held: Speaking.Utterance): String = when {
         directive.withdrawal?.id == held.id -> "WITHDRAWN"
+        externalVoice -> "external-voice"
         events.any { it is InputEvent.SpeechEnded && it.id == held.id } -> "speaker"
         events.any { it is InputEvent.Seeked } -> "seek"
         events.any { it is InputEvent.ReactiveRequested } -> "preempted"

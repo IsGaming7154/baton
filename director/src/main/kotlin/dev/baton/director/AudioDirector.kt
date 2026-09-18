@@ -345,6 +345,26 @@ package dev.baton.director
  *   the switch is thrown finishes, unless the button press that threw it is
  *   answered by a reactive announcement, which preempts it under rule 1.
  *
+ * ## Another app's voice outranks all of ours
+ *
+ * "Exactly one voice at a time" counts voices the director does not own. On Fire
+ * TV the screen reader, VoiceView, speaks on its own schedule -- FRICTION_LOG.md
+ * entry 19 -- and the caller can see it coming only as a loss of audio focus. While
+ * [DirectorInputs.externalVoice] holds, Baton yields completely: what it is saying
+ * is cut on the first such tick, nothing scheduled or reactive starts, a cue whose
+ * moment comes is dropped with [DropReason.YieldedToExternalVoice], and a button
+ * press is refused into [Directive.refused]. When it clears, scheduling resumes
+ * from the current position against the ordinary rules, gap included; nothing that
+ * was cut or dropped comes back.
+ *
+ * Cut rather than held, because the other voice is not one this machine can time:
+ * it did not come from the track, so there is no room it was written into and no
+ * deadline it will keep. A cut description is the pause path's artefact and is
+ * reported the same way; the disclosure, cut by it, stays owed exactly as a pause
+ * leaves it, since the viewer was not told. The duck follows the floor as it always
+ * does, so the film comes back up as Baton goes quiet -- the other voice brings its
+ * own ducking with it or does not, and that is the platform's business.
+ *
  * Not thread-safe, and not meant to be: one player, one director, one caller.
  */
 class AudioDirector(
@@ -447,6 +467,16 @@ class AudioDirector(
         noteStall(nowMs, inputs.playback)
         lastPlayback = inputs.playback
 
+        // Level, not an edge: nothing can take the floor while another voice holds
+        // it, so in practice this fires on the first tick of the yield and never
+        // again -- but stated as a level it cannot be missed by a caller that
+        // delivered the edge on a tick the director was not asked about.
+        if (inputs.externalVoice && active != null) {
+            active = null
+            releasedAtPositionMs = inputs.positionMs
+        }
+
+        var refused: MutableList<ReactiveRequest>? = null
         var timelineJumped = false
         for (event in inputs.events) {
             when (event) {
@@ -471,8 +501,12 @@ class AudioDirector(
 
                 is InputEvent.ReactiveRequested -> {
                     // Rules 1 and 2 in one line: the newest user intent takes the
-                    // floor from whatever held it.
-                    active = event.request.takeFloor(nowMs)
+                    // floor from whatever held it -- unless the floor is not ours.
+                    if (inputs.externalVoice) {
+                        (refused ?: mutableListOf<ReactiveRequest>().also { refused = it }) += event.request
+                    } else {
+                        active = event.request.takeFloor(nowMs)
+                    }
                 }
             }
         }
@@ -494,7 +528,7 @@ class AudioDirector(
         // carrying a withdrawal has no room left to name an utterance -- so this
         // is where the two agree rather than a second rule.
         val drops = if (inputs.playback == Playback.PLAYING && !timelineJumped && withdrawal == null) {
-            arbitrateScheduled(nowMs, inputs.positionMs, inputs.silencedKinds, inputs.descriptionLength)
+            arbitrateScheduled(nowMs, inputs.positionMs, inputs.silencedKinds, inputs.descriptionLength, inputs.externalVoice)
         } else {
             emptyList()
         }
@@ -526,6 +560,7 @@ class AudioDirector(
             contentDuck = appliedDuck,
             drops = drops,
             stall = stall,
+            refused = refused ?: emptyList(),
         )
     }
 
@@ -715,6 +750,7 @@ class AudioDirector(
         positionMs: Long,
         silenced: Set<UtteranceKind.Scheduled>,
         length: DescriptionLength,
+        yielded: Boolean,
     ): List<DroppedCue> {
         var drops: MutableList<DroppedCue>? = null
         var best: Candidate? = null
@@ -735,7 +771,11 @@ class AudioDirector(
                 resolved += cue.id
                 continue
             }
-            when (val assessment = assess(cue, positionMs, length)) {
+            // After the switch, so a kind the viewer turned off stays silent rather
+            // than being reported as refused. Before assessment, so a cue that would
+            // have fitted is dropped for the reason it actually lost its moment.
+            val assessment = if (yielded) Assessment.Drop(DropReason.YieldedToExternalVoice) else assess(cue, positionMs, length)
+            when (assessment) {
                 is Assessment.Drop -> {
                     resolved += cue.id
                     val list = drops ?: mutableListOf<DroppedCue>().also { drops = it }
@@ -761,6 +801,9 @@ class AudioDirector(
                 }
             }
         }
+
+        // Every due cue was dropped above, so only the disclosure is left to hold back.
+        if (yielded) return drops ?: emptyList()
 
         // The floor is free for a scheduled start only once the gap since it was last
         // released has run. Admission alone waits: every cue above was assessed at

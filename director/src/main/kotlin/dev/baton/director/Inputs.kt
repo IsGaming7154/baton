@@ -174,6 +174,27 @@ data class DirectorInputs(
      * a change is heard from the next cue on and never cuts a sentence short.
      */
     val descriptionLength: DescriptionLength = DescriptionLength.LONG,
+    /**
+     * Whether another app's voice has the floor right now -- on Fire TV, the screen
+     * reader VoiceView, which asks for transient audio focus before every sentence
+     * and gives it back after (FRICTION_LOG.md entry 19). Level state for the reason
+     * [playback] is: "VoiceView is talking" is true for a stretch of time, and the
+     * caller holds the answer -- the focus it last heard about -- rather than a
+     * history the director would have to keep in step with.
+     *
+     * Named for the fact, not the response. The caller reports that a voice outside
+     * the director is speaking; that Baton yields to it is the director's decision,
+     * made in one place: while this is true whatever Baton is saying is cut, nothing
+     * new starts -- scheduled or reactive -- and a cue whose moment comes while it
+     * holds is dropped with [DropReason.YieldedToExternalVoice] rather than queued,
+     * because the scene it describes will have gone by the time the floor is back.
+     * A reactive request is refused and reported in [Directive.refused].
+     *
+     * A boolean and not a fourth [Playback] value, because it is independent of the
+     * picture: the film keeps playing under VoiceView, and may be paused or stalled
+     * while it speaks.
+     */
+    val externalVoice: Boolean = false,
 ) {
     init {
         require(positionMs >= 0) { "positionMs must be >= 0, was $positionMs" }

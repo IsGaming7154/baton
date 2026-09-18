@@ -92,6 +92,12 @@ class AudioDirectorInvariantTest : FunSpec({
             (seen.descriptionsDroppedForBooking > 42) shouldBe true
             (seen.subtitleKeptRoomPastDescription > 22) shouldBe true
             (seen.disclosureYieldedToBooking > 23) shouldBe true
+            // Another app's voice (FRICTION_LOG.md entry 19): ours cut under it, cues
+            // coming due inside it, and presses refused there. About a third of the
+            // pinned draw, which is all these have so far.
+            (seen.cutForExternalVoice > 85) shouldBe true
+            (seen.dropsYieldedToExternalVoice > 75) shouldBe true
+            (seen.reactiveRefused > 150) shouldBe true
         }
     }
 })
@@ -159,10 +165,14 @@ private fun drive(
         val previousPlayback = playback
         playback = step.playback
 
-        val directive = director.advance(nowMs, DirectorInputs(positionMs, playback, events))
-        invariants.check(index, nowMs, positionMs, playback, events, directive)
+        val directive = director.advance(
+            nowMs,
+            DirectorInputs(positionMs, playback, events, externalVoice = step.externalVoice),
+        )
+        invariants.check(index, nowMs, positionMs, playback, events, directive, step.externalVoice)
         coverage.record(
             scenario.track, previous, directive, positionMs, events, previousPlayback, playback, starts,
+            externalVoice = step.externalVoice,
             disclosureOwed = invariants.disclosureOwed,
             disclosure = scenario.disclosure,
             guardMs = config.guardMs,
@@ -226,6 +236,9 @@ private class Coverage {
     var descriptionsDroppedForBooking = 0
     var subtitleKeptRoomPastDescription = 0
     var disclosureYieldedToBooking = 0
+    var cutForExternalVoice = 0
+    var dropsYieldedToExternalVoice = 0
+    var reactiveRefused = 0
 
     fun record(
         track: DescriptionTrack,
@@ -236,6 +249,7 @@ private class Coverage {
         previousPlayback: Playback,
         playback: Playback,
         starts: MutableMap<UtteranceId, Long>,
+        externalVoice: Boolean,
         disclosureOwed: Boolean,
         disclosure: Variant?,
         guardMs: Long,
@@ -292,6 +306,7 @@ private class Coverage {
                     if (it.kind == UtteranceKind.Scheduled.AUDIO_DESCRIPTION) descriptionsDroppedForBooking++
                 DropReason.NoSilenceAtCueStart -> dropsNoSilenceAtCueStart++
                 DropReason.NoVariants -> dropsNoVariants++
+                DropReason.YieldedToExternalVoice -> dropsYieldedToExternalVoice++
             }
         }
 
@@ -305,12 +320,14 @@ private class Coverage {
             if (it.kind == UtteranceKind.Scheduled.SYNTHETIC_SPEECH_DISCLOSURE) disclosureWithdrawn++
         }
         if (directive.stall != null) stallAnomalies++
+        reactiveRefused += directive.refused.size
 
         if (previous is Speaking.Utterance) {
             if (events.any { it is InputEvent.Seeked }) seekDuringSpeech++
             if (previousPlayback != Playback.PAUSED && playback == Playback.PAUSED) pauseDuringSpeech++
             if (previousPlayback == Playback.PLAYING && playback == Playback.STALLED) stallDuringSpeech++
             if (events.any { it is InputEvent.SpeechEnded && it.id == previous.id }) speakerEndedSpeech++
+            if (externalVoice) cutForExternalVoice++
         }
     }
 
@@ -328,7 +345,9 @@ private class Coverage {
         "cueStartedWhileDisclosureOwed=$cueStartedWhileDisclosureOwed " +
         "descriptionsDroppedForBooking=$descriptionsDroppedForBooking " +
         "subtitleKeptRoomPastDescription=$subtitleKeptRoomPastDescription " +
-        "disclosureYieldedToBooking=$disclosureYieldedToBooking)"
+        "disclosureYieldedToBooking=$disclosureYieldedToBooking " +
+        "cutForExternalVoice=$cutForExternalVoice dropsYieldedToExternalVoice=$dropsYieldedToExternalVoice " +
+        "reactiveRefused=$reactiveRefused)"
 }
 
 /**
@@ -353,6 +372,7 @@ private class Invariants(
     private var previous: Directive? = null
     private var previousPlayback = Playback.PLAYING
     private val issued = mutableMapOf<UtteranceId, ReactiveRequest>()
+    private val refused = mutableSetOf<UtteranceId>()
 
     /** Cue -> the wall clock reading at which it began, since the last seek. */
     private val spokenSinceSeek = mutableMapOf<CueId, Long>()
@@ -375,6 +395,7 @@ private class Invariants(
         playback: Playback,
         events: List<InputEvent>,
         directive: Directive,
+        externalVoice: Boolean,
     ) {
         events.filterIsInstance<InputEvent.ReactiveRequested>().forEach { issued[it.request.id] = it.request }
         val seeked = events.any { it is InputEvent.Seeked }
@@ -390,7 +411,8 @@ private class Invariants(
 
         withClue(clue) {
             checkDuck(directive)
-            checkDrops(directive)
+            checkDrops(directive, externalVoice)
+            checkExternalVoice(directive, events, externalVoice)
             when (val speaking = directive.speaking) {
                 is Speaking.Silent, is Speaking.Withdrawn -> Unit
                 is Speaking.ScheduledUtterance -> checkScheduled(speaking, positionMs, playback)
@@ -399,7 +421,7 @@ private class Invariants(
             checkWallClockCeiling(directive, nowMs)
             checkWithdrawal(directive)
             checkStall(directive, playback)
-            checkNobodyWasCutOff(directive, playback, events)
+            checkNobodyWasCutOff(directive, playback, events, externalVoice)
             checkSeekLeavesSilence(directive, events)
             checkDisclosure(directive, positionMs, events)
             checkBookings(directive)
@@ -430,8 +452,11 @@ private class Invariants(
         }
     }
 
-    private fun checkDrops(directive: Directive) {
+    private fun checkDrops(directive: Directive, externalVoice: Boolean) {
         directive.drops.forEach { drop ->
+            withClue("a cue was dropped for another app's voice while none had the floor") {
+                (drop.reason != DropReason.YieldedToExternalVoice || externalVoice) shouldBe true
+            }
             val cue = track.cues.singleOrNull { it.id == drop.cueId }
             withClue("a drop names a cue that is not in the track") { (cue != null) shouldBe true }
             withClue("a cue that already spoke was later reported as dropped") {
@@ -655,7 +680,27 @@ private class Invariants(
         .filter { it.kind == UtteranceKind.Scheduled.SPOKEN_SUBTITLE && it.startMs > positionMs }
         .minOfOrNull { it.startMs } ?: Long.MAX_VALUE
 
+    /**
+     * While another app's voice has the floor, none of ours does: nothing is named,
+     * every press on this tick is refused and reported, and none is refused
+     * otherwise. A refused press is never answered later -- [checkReactive] holds
+     * that half, since the refusal is recorded here first.
+     */
+    private fun checkExternalVoice(directive: Directive, events: List<InputEvent>, externalVoice: Boolean) {
+        val requested = events.filterIsInstance<InputEvent.ReactiveRequested>().map { it.request }
+        if (externalVoice) {
+            withClue("one of our voices was named while another app's voice had the floor") {
+                (directive.speaking as? Speaking.Utterance) shouldBe null
+            }
+            withClue("a press made while yielded was not refused") { directive.refused shouldBe requested }
+        } else {
+            withClue("a press was refused while no other voice had the floor") { directive.refused shouldBe emptyList() }
+        }
+        refused += directive.refused.map { it.id }
+    }
+
     private fun checkReactive(speaking: Speaking.ReactiveUtterance) {
+        withClue("a refused press was answered after all") { (speaking.id in refused) shouldBe false }
         val request = issued[speaking.id]
         withClue("a reactive utterance nobody asked for") { (request != null) shouldBe true }
         requireNotNull(request)
@@ -764,6 +809,7 @@ private class Invariants(
         directive: Directive,
         playback: Playback,
         events: List<InputEvent>,
+        externalVoice: Boolean,
     ) {
         val before = previous?.speaking as? Speaking.Utterance ?: return
         val after = directive.speaking
@@ -779,7 +825,7 @@ private class Invariants(
         val floorWithdrawn = directive.withdrawal?.id == before.id
 
         withClue("utterance ${before.id} stopped speaking with no cause the policy allows") {
-            (preemptedByUser || timelineJumped || speakerReported || pausedEdge || floorWithdrawn) shouldBe true
+            (preemptedByUser || timelineJumped || speakerReported || pausedEdge || floorWithdrawn || externalVoice) shouldBe true
         }
     }
 

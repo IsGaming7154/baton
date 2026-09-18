@@ -1,5 +1,8 @@
 package dev.baton.tv
 
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -110,6 +113,44 @@ class MainActivity : ComponentActivity() {
 
     /** The prepared track's [DescriptionTrack.sourceId], which keys [TitleDescriptions]. Null until preparation returns one. */
     private var titleId: String? = null
+
+    /**
+     * Whether another app's voice has the floor, as audio focus last reported it
+     * (FRICTION_LOG.md entry 19). Held here rather than only on the tracer because
+     * focus is requested before preparation has built one; see [focusRequest].
+     */
+    private var externalVoice = false
+
+    /**
+     * Held for no audio of its own -- ExoPlayer here is not given audio attributes and
+     * so does not handle focus, and the speaker's `AudioTrack` does not request it --
+     * but because holding it is the only way this app hears VoiceView coming.
+     *
+     * VoiceView asks for `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` before it speaks and
+     * abandons after, so a `GAIN` holder loses focus with
+     * `AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK` (AOSP 9 FocusRequester.java:287-291).
+     * [AudioFocusRequest.Builder.setWillPauseWhenDucked] is the part that matters:
+     * without `AUDIOFOCUS_FLAG_PAUSES_ON_DUCKABLE_LOSS` the framework ducks the holder
+     * itself and never tells it (FocusRequester.java:356-382, 408-418). Measured on the
+     * Fire TV Stick 2026-09-18: the loss arrived 2-24 ms after each VoiceView request
+     * and the gain 1-137 ms after each abandon, 3 of 3.
+     *
+     * No handler is given, so the listener runs on the looper of the thread that made
+     * the [AudioManager] (AudioManager.java:2238-2258, 2320-2323) -- the main one,
+     * which is the thread the tracer reads [Tracer.externalVoice] on.
+     */
+    private val focusRequest: AudioFocusRequest by lazy {
+        AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                    .build(),
+            )
+            .setWillPauseWhenDucked(true)
+            .setOnAudioFocusChangeListener(::onAudioFocusChange)
+            .build()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -240,6 +281,7 @@ class MainActivity : ComponentActivity() {
                 // preparation was still running and had no director to tell.
                 running.silencedKinds = silencedKinds()
                 running.descriptionLength = descriptionLength()
+                running.externalVoice = externalVoice
                 player.onSeek(running::onSeek)
                 running.start()
             }
@@ -318,6 +360,7 @@ class MainActivity : ComponentActivity() {
      */
     override fun onStart() {
         super.onStart()
+        requestAudioFocus()
         val running = tracer ?: return
         running.start()
         announce(TransportNarration.state(player.exoPlayer.playWhenReady))
@@ -444,6 +487,45 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         tracer?.stop()
         player.exoPlayer.playWhenReady = false
+        getSystemService(AudioManager::class.java).abandonAudioFocusRequest(focusRequest)
+    }
+
+    /**
+     * On every start and not once in `onCreate`, paired with the abandon in [onStop].
+     * A permanent loss -- another app playing while this one is in the background --
+     * is never followed by a gain, so focus held from `onCreate` would leave Baton
+     * yielded for good the moment the viewer came back. Asking again on return takes
+     * it back; and while stopped there is no Baton audio to yield anyway.
+     *
+     * ponytail: a refused request (a call in progress, say) yields until the next
+     * start, since no callback follows a refusal; delayed gain would lift that.
+     */
+    private fun requestAudioFocus() {
+        val result = getSystemService(AudioManager::class.java).requestAudioFocus(focusRequest)
+        setExternalVoice(result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+        log("audio focus request result=$result yielded=$externalVoice")
+    }
+
+    /**
+     * Both transient losses mean another voice is speaking and will give the floor
+     * back. A permanent loss is yielded to as well -- another app has taken the audio,
+     * and speaking over it is the one thing not to do -- but the film is not paused
+     * for it, and only the next [onStart] takes focus back.
+     */
+    private fun onAudioFocusChange(change: Int) {
+        when (change) {
+            AudioManager.AUDIOFOCUS_GAIN -> setExternalVoice(false)
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS,
+            -> setExternalVoice(true)
+        }
+        log("audio focus change=$change yielded=$externalVoice")
+    }
+
+    private fun setExternalVoice(yielded: Boolean) {
+        externalVoice = yielded
+        tracer?.externalVoice = yielded
     }
 
     override fun onDestroy() {

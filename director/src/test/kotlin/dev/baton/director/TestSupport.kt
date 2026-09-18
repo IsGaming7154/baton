@@ -85,6 +85,9 @@ class Session(
     /** The row's description length, as the app would hold it. Level state; set it and tick. */
     var descriptionLength: DescriptionLength = DescriptionLength.LONG
 
+    /** Whether another app's voice (VoiceView) has the floor, as the app would hold it. Level state; set it and tick. */
+    var externalVoice: Boolean = false
+
     val history: MutableList<Directive> = mutableListOf()
 
     /** Advance both clocks by [stepMs] (the content only if it is playing) and tick. */
@@ -146,6 +149,7 @@ class Session(
                 speakerReport() + events,
                 silencedKinds = silencedKinds,
                 descriptionLength = descriptionLength,
+                externalVoice = externalVoice,
             ),
         )
         speaking = directive.speaking as? Speaking.Utterance
@@ -186,5 +190,7 @@ fun List<Directive>.spokenCueIds(): List<CueId> = scheduledStarts().mapNotNull {
 fun List<Directive>.allDrops(): List<DroppedCue> = flatMap { it.drops }
 
 fun List<Directive>.withdrawals(): List<Withdrawal> = mapNotNull { it.withdrawal }
+
+fun List<Directive>.refusals(): List<ReactiveRequest> = flatMap { it.refused }
 
 fun List<Directive>.stalls(): List<PlaybackStall> = mapNotNull { it.stall }
