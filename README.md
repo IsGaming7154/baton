@@ -42,7 +42,7 @@ The tracer has been run on a Fire TV Stick, and the device measurements quoted t
 
 **Not possible, and why it is worth saying**
 
-Baton arbitrates the voices it owns. It cannot arbitrate against VoiceView, because VoiceView runs outside the process and exposes no signal that it is speaking. That is precisely the gap the feature request in friction-log entry 1 asks Fire OS to close.
+Baton arbitrates the voices it owns. VoiceView runs outside the process and exposes no signal that it is speaking, so Baton cannot schedule around it; it can only get out of its way. VoiceView asks for transient audio focus before it speaks, and Baton holds focus in a way that makes the framework tell it (friction-log entry 19). While VoiceView has the floor, Baton cuts what it is saying, starts nothing new, drops descriptions whose moment passes and refuses button narration; on the Stick its voice was released 24 ms after VoiceView took focus. That yields; it does not coordinate. A documented "VoiceView is speaking" signal is still the gap the feature requests in friction-log entries 1 and 19 ask Fire OS to close.
 
 ---
 
@@ -66,7 +66,7 @@ This is the command that is known to work. Run here with `--rerun-tasks`, so not
 
 **399 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
 
-That is 334 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,163,184 bytes.
+That is 334 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,163,664 bytes.
 
 Nothing here needs a device, a network, an emulator, or an AWS account. `:director`, `:loudness` and `:pipeline` are pure-JVM modules and their tests are plain JUnit.
 
@@ -314,7 +314,7 @@ The feature request writes itself, because Amazon has already built it. `@amazon
 | Number | Source |
 |---|---|
 | 399 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
-| APK 32,163,184 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
+| APK 32,163,664 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
 | Demo clip: 88.6 s, 854×356 H.264, AAC 48 kHz stereo | `ffprobe` |
 | Demo clip: −30.3 LUFS integrated, LRA 20.0 LU | `ffmpeg -af ebur128` |
 | −23.0 / −33.0 LUFS on EBU Tech 3341 signals | `:loudness` tests, run here |
@@ -334,7 +334,7 @@ Numbers attributed to the device were measured on hardware in an earlier session
 Open, and not hidden:
 
 - **An overrun is bounded, not eliminated.** The director withdraws the floor from an utterance that has run past the silence window it was granted, or past its speaker deadline -- modelled as `Speaking.Withdrawn` carrying a `Withdrawal` whose `WithdrawalReason` is `OutOfSilence`, `SpeakerOverdue`, or `NeverMeasured` (`Directive.kt`). `Tracer` acts on it by calling `speaker.stop(id)` and logs an `ANOMALY floor withdrawn` line carrying both `measuredMs` and `heldForMs`, so the price of the policy is legible afterwards. What is not bounded is the withdrawal's own latency: the overrun is the 50 ms director tick plus however long the platform's `AudioTrack` takes to actually go quiet after `stop()` -- and that second term has never been measured on the device. Baton does not claim a zero-overlap guarantee. It claims a bounded and reported one.
-- **VoiceView's silence inside Baton is not device-verified.** The transport buttons are `invisibleToUser`, so VoiceView has no node of its own to read out, but Compose 1.6.8 still sends `TYPE_VIEW_FOCUSED` for a focused node that is invisible to the user. Whether VoiceView speaks on that event — a second voice on top of Baton's own narration — can only be answered on the Fire TV Stick with VoiceView on.
+- **VoiceView inside Baton, device-checked 2026-09-16 and 2026-09-18.** With the transport buttons `invisibleToUser`, VoiceView stayed silent on focus moves in the first run, but spoke on its own at playback start and at each screen-curtain toggle, and in the second run for about 10 s after a Down press into the access-services row. What it says is not recorded anywhere a developer can reach. Baton now yields to it (above); whether the first few milliseconds of VoiceView still overlap Baton's cut needs an audio capture of the Stick's output, which this project does not yet have (friction-log entry 15).
 - The live AWS pipeline, visual question answering, the question ring, spoken subtitles from a live track, and the accessible UI surfaces beyond the transport bar are all specified and unbuilt. See the scope section above.
 
 ---
