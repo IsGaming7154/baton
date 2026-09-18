@@ -53,6 +53,7 @@ fun TransportBar(
     modifier: Modifier = Modifier,
     services: Set<AccessService> = emptySet(),
     onToggleService: (AccessService) -> Unit = {},
+    rate: SpeakingRate = SpeakingRate.NORMAL,
 ) {
     val playPause = remember { FocusRequester() }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -66,7 +67,7 @@ fun TransportBar(
             )
             TransportButton(TransportNarration.FAST_FORWARD, onFastForward, announce)
         }
-        AccessServicesRow(on = services, onToggle = onToggleService, announce = announce)
+        AccessServicesRow(on = services, onToggle = onToggleService, announce = announce, rate = rate)
     }
     LaunchedEffect(Unit) { playPause.requestFocus() }
 }
@@ -133,6 +134,17 @@ object TransportNarration {
      */
     fun toggle(service: AccessService, on: Boolean): String = "${focused(service.label)}, ${service.state(on)}"
 
+    /** [toggle]'s shape for the speaking-rate control, on focus: "Speaking rate, button, normal". */
+    fun rate(rate: SpeakingRate): String = "${focused(AccessService.SPEAKING_RATE.label)}, ${rate.word}"
+
+    /**
+     * What a press on the speaking-rate control says. Not [rate] again, because the
+     * press changes nothing the viewer can hear yet: the rate is applied when speech
+     * is rendered, at preparation (`TrackPreparation.prepare`), so the new one is
+     * heard from the next start, and the voice saying this sentence is still the old.
+     */
+    fun rateChanged(rate: SpeakingRate): String = "${AccessService.SPEAKING_RATE.label}, ${rate.word}, from next start"
+
     /**
      * `RenderedAudioSpeaker` refuses an utterance with no `audioRef`, so a phrase
      * speaks only once rendered (~0.5-0.7 s each on the Stick). [AT_START] is what
@@ -147,7 +159,9 @@ object TransportNarration {
             state(playing = true) + state(playing = false)
 
     val AFTER_START: List<String> =
-        AccessService.entries.flatMap { listOf(toggle(it, on = true), toggle(it, on = false)) }
+        (AccessService.entries - AccessService.SPEAKING_RATE)
+            .flatMap { listOf(toggle(it, on = true), toggle(it, on = false)) } +
+            SpeakingRate.entries.flatMap { listOf(rate(it), rateChanged(it)) }
 
     val PHRASES: List<String> = AT_START + AFTER_START
 }

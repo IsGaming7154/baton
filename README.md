@@ -38,7 +38,7 @@ The tracer has been run on a Fire TV Stick, and the device measurements quoted t
 - The live AWS pipeline. `:pipeline`'s ports are defined against Transcribe, Bedrock Nova and Polly, and its fixtures are stored in those services' own response shapes so the parsers are the real ones. Polly and Transcribe have live adapters so far (`PollySynthesis` and `TranscribeTranscription`, on the AWS SDK for Java v2): they are tested against fake clients. Polly's manual smoke call (`gradlew :pipeline:pollySmoke`) has been run once, billed 56 characters, exactly the estimate; Transcribe's (`gradlew :pipeline:transcribeSmoke`) was first refused on the account's Free plan (friction-log entry 20) and, after the account moved to a paid plan, ran once on the demo clip: 62 German words, every one inside the timing of one of the clip's 12 subtitle lines, parsed by the same parser the recorded fixtures use. Nova has a live adapter too (`NovaDrafting`, Bedrock `Converse` with the clip sent inline and the model id a required parameter, e.g. the `us.amazon.nova-2-lite-v1:0` inference profile), tested against a fake client with its billed tokens settling the spend guard's estimate; its manual smoke run (`gradlew :pipeline:novaSmoke`) has not been run yet. Nothing in the test suite makes a network call. This is deliberate: the loop that has to be right is the one that runs for free.
 - Reactive speech beyond menu narration. The director arbitrates `VQA_ANSWER` today, and its preemption behaviour is tested, but nothing in the app raises one yet. There is no question ring and no visual question answering.
 - Spoken subtitles from a *live* subtitle track. The kind exists and outranks description in the policy, and the app now parses and speaks a bundled subtitle sidecar (`SubtitleFile.kt`, `TrackPreparation.kt`) the same way it speaks the bundled description track; what remains unbuilt is deriving that subtitle track from the live pipeline, rather than authoring it in advance.
-- The rest of the accessible UI: description frequency and emphasis settings, and a description speaking rate independent of VoiceView's. Specified in [`PRD.md`](PRD.md). The screen curtain and the access-services row are built and were checked on the Stick from its log and screenshots; neither has yet been run with VoiceView on.
+- Description frequency and emphasis settings: cut. The description speaking rate independent of VoiceView's is built (Slower, Normal, Faster on the access-services row, stored across restarts), and applies from the next start because speech is rendered and measured at preparation. Specified in [`PRD.md`](PRD.md). The screen curtain and the access-services row are built and were checked on the Stick from its log and screenshots; neither has yet been run with VoiceView on.
 
 **Not possible, and why it is worth saying**
 
@@ -64,9 +64,9 @@ Gradle 8.7 comes from the wrapper. AGP 8.6.1, Kotlin 1.9.24 and every dependency
 
 This is the command that is known to work. Run here with `--rerun-tasks`, so nothing was taken from the cache, it ends in `BUILD SUCCESSFUL`. Counting the JUnit XML it leaves behind under each module's `build/test-results`:
 
-**399 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
+**403 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
 
-That is 334 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,163,664 bytes.
+That is 338 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,298,185 bytes.
 
 Nothing here needs a device, a network, an emulator, or an AWS account. `:director`, `:loudness` and `:pipeline` are pure-JVM modules and their tests are plain JUnit.
 
@@ -313,8 +313,8 @@ The feature request writes itself, because Amazon has already built it. `@amazon
 
 | Number | Source |
 |---|---|
-| 399 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
-| APK 32,163,664 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
+| 403 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
+| APK 32,298,185 bytes | `app/build/outputs/apk/debug/app-debug.apk` |
 | Demo clip: 88.6 s, 854×356 H.264, AAC 48 kHz stereo | `ffprobe` |
 | Demo clip: −30.3 LUFS integrated, LRA 20.0 LU | `ffmpeg -af ebur128` |
 | −23.0 / −33.0 LUFS on EBU Tech 3341 signals | `:loudness` tests, run here |

@@ -112,6 +112,13 @@ class MainActivity : ComponentActivity() {
      */
     private var services by mutableStateOf(emptySet<AccessService>())
 
+    /**
+     * The stored [SpeakingRate] (PRD.md user story 30), which is what the row shows and
+     * what the next preparation renders at. Not necessarily what is speaking now: a
+     * press stores the new rate and this session keeps the one it was rendered at.
+     */
+    private var speakingRate by mutableStateOf(SpeakingRate.NORMAL)
+
     /** The prepared track's [DescriptionTrack.sourceId], which keys [TitleDescriptions]. Null until preparation returns one. */
     private var titleId: String? = null
 
@@ -163,6 +170,7 @@ class MainActivity : ComponentActivity() {
             if (intent.getBooleanExtra("spokenSubtitles", true)) add(AccessService.SPOKEN_SUBTITLES)
             add(AccessService.CAPTIONS)
         }
+        speakingRate = SpeakingRates.get(this)
 
         player = BatonPlayer(this, ::log)
         // The second URI is the clip's English SubRip sidecar.
@@ -200,6 +208,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp),
                     services = services,
                     onToggleService = ::toggle,
+                    rate = speakingRate,
                 )
                 // Last, so it covers the picture, the subtitles, the notice and the
                 // controls. Nothing on this path reaches the player: see ScreenCurtain.
@@ -226,6 +235,7 @@ class MainActivity : ComponentActivity() {
                 descriptions = intent.getBooleanExtra("descriptions", true),
                 spokenSubtitles = intent.getBooleanExtra("spokenSubtitles", true),
                 log = ::log,
+                rate = SpeakingRates.get(this),
             )
         }
             .onFailure { log("ERROR track preparation failed: $it") }
@@ -430,10 +440,20 @@ class MainActivity : ComponentActivity() {
      * [AccessService.DESCRIPTION] is refused until preparation has named the title:
      * there is no key to store it under, and the stored value has not been read yet.
      * It is silent either way -- the row's phrases are not rendered before then.
+     *
+     * [AccessService.SPEAKING_RATE] only stores the next rate: nothing reaches the
+     * director, whose track was rendered at the old one (see `TrackPreparation.prepare`).
      */
     private fun toggle(service: AccessService) {
         if (service == AccessService.DESCRIPTION && titleId == null) {
             log("access service refused service=$service reason=not-prepared")
+            return
+        }
+        if (service == AccessService.SPEAKING_RATE) {
+            speakingRate = speakingRate.next()
+            SpeakingRates.set(this, speakingRate)
+            log("access service=$service rate=${speakingRate.word} multiplier=${speakingRate.multiplier} from=next-start")
+            announce(TransportNarration.rateChanged(speakingRate))
             return
         }
         val on = service !in services

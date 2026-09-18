@@ -86,8 +86,16 @@ object TrackPreparation {
         descriptions: Boolean,
         spokenSubtitles: Boolean,
         log: (String) -> Unit,
+        rate: SpeakingRate = SpeakingRate.NORMAL,
     ): PreparedTrack {
         log("toggles descriptions=$descriptions spokenSubtitles=$spokenSubtitles")
+        // ponytail: the rate is applied here, at render time, so a change is heard from
+        // the next start and not mid-film. The director is built around one immutable
+        // track whose every duration was measured off audio rendered at one rate
+        // (AudioDirector.kt:370-371); changing the rate under it would make those
+        // durations lies. Upgrade path: re-render the track at the new rate in the
+        // background and swap the director in at an empty floor.
+        log("speech rate=${rate.word} multiplier=${rate.multiplier}")
 
         val authored = context.assets.open(ASSET).use { it.readBytes().toString(Charsets.UTF_8) }
             .let(DescriptionTrackJson::decode)
@@ -105,6 +113,7 @@ object TrackPreparation {
             outputDir = File(context.cacheDir, "speech"),
             preferredLocale = Locale.forLanguageTag(authored.locale),
             log = log,
+            speechRate = rate.multiplier,
         )
         if (synth == null) {
             log(

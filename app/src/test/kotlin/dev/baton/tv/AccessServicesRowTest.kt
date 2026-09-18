@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.isFocusable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyPress
 import androidx.compose.ui.test.performSemanticsAction
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -62,6 +63,7 @@ class AccessServicesRowTest {
     private fun showShell(initial: Set<AccessService> = DEFAULT_ON) {
         compose.setContent {
             var services by remember { mutableStateOf(initial) }
+            var rate by remember { mutableStateOf(SpeakingRate.NORMAL) }
             TransportBar(
                 playing = false,
                 onRewind = {},
@@ -71,8 +73,13 @@ class AccessServicesRowTest {
                 services = services,
                 onToggleService = { service ->
                     toggled += service
-                    services = if (service in services) services - service else services + service
+                    when {
+                        service == AccessService.SPEAKING_RATE -> rate = rate.next()
+                        service in services -> services = services - service
+                        else -> services = services + service
+                    }
                 },
+                rate = rate,
             )
         }
     }
@@ -94,7 +101,8 @@ class AccessServicesRowTest {
         listOf(TransportNarration.REWIND, TransportNarration.PLAY, TransportNarration.FAST_FORWARD)
 
     private fun togglePhrases(on: Set<AccessService>): List<String> =
-        AccessService.entries.map { TransportNarration.toggle(it, it in on) }
+        (AccessService.entries - AccessService.SPEAKING_RATE).map { TransportNarration.toggle(it, it in on) } +
+            TransportNarration.rate(SpeakingRate.NORMAL)
 
     @Test
     fun oneDpadPressDownFromTheTransportBarReachesTheRowAndOnePressBackLeavesIt() {
@@ -185,10 +193,62 @@ class AccessServicesRowTest {
      */
     @Test
     fun everyStateOfEveryControlIsAPreparedPhrase() {
-        val required = AccessService.entries.flatMap {
+        val required = (AccessService.entries - AccessService.SPEAKING_RATE).flatMap {
             listOf(TransportNarration.toggle(it, on = true), TransportNarration.toggle(it, on = false))
-        }
+        } + SpeakingRate.entries.flatMap { listOf(TransportNarration.rate(it), TransportNarration.rateChanged(it)) }
         (required - TransportNarration.PHRASES.toSet()).shouldBeEmpty()
+        (required - TransportNarration.AFTER_START.toSet()).shouldBeEmpty()
+    }
+
+    /** Seven controls, the last showing the rate by its word. */
+    @Test
+    fun theRowCarriesASpeakingRateControlLabelledWithItsRate() {
+        showShell()
+
+        compose.onAllNodes(isFocusable()).fetchSemanticsNodes().size shouldBe 3 + 7
+        compose.onNodeWithText("Speaking rate: normal").assertExists()
+    }
+
+    /**
+     * Focus says the rate the control shows; a press moves it one step and the row
+     * shows the new one, with focus left where it was. The press's own announcement,
+     * "from next start", is `MainActivity.toggle`'s and is pinned below.
+     */
+    @Test
+    fun pressingTheRateControlStepsItAndFocusStays() {
+        showShell()
+
+        compose.onNodeWithContentDescription("Speaking rate, button, normal")
+            .performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.runOnIdle { heard.last() shouldBe "Speaking rate, button, normal" }
+
+        press("Speaking rate, button, normal", NativeKeyEvent.KEYCODE_DPAD_CENTER)
+
+        toggled shouldContainExactly listOf(AccessService.SPEAKING_RATE)
+        compose.onNodeWithContentDescription("Speaking rate, button, faster").assertIsFocused()
+        compose.onNodeWithText("Speaking rate: faster").assertExists()
+    }
+
+    @Test
+    fun theRateCyclesSlowerNormalFasterAndRoundAgain() {
+        generateSequence(SpeakingRate.SLOWER) { it.next() }.take(4).toList() shouldContainExactly
+            listOf(SpeakingRate.SLOWER, SpeakingRate.NORMAL, SpeakingRate.FASTER, SpeakingRate.SLOWER)
+        SpeakingRate.entries.map { it.multiplier } shouldContainExactly listOf(0.85f, 1.0f, 1.2f)
+        TransportNarration.rateChanged(SpeakingRate.FASTER) shouldBe "Speaking rate, faster, from next start"
+    }
+
+    /** One stored rate for every title, Normal until something is stored, read back from storage. */
+    @Test
+    fun theRateIsStoredGloballyAndDefaultsNormal() {
+        val context = RuntimeEnvironment.getApplication()
+
+        SpeakingRates.get(context) shouldBe SpeakingRate.NORMAL
+
+        SpeakingRates.set(context, SpeakingRate.SLOWER)
+        SpeakingRates.get(context) shouldBe SpeakingRate.SLOWER
+
+        // Not the per-title file: storing a rate leaves Description's state alone.
+        TitleDescriptions.isOn(context, "title-a") shouldBe false
     }
 
     /**

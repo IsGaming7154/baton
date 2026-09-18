@@ -22,10 +22,12 @@ import androidx.tv.material3.Text
 /**
  * The controls the access-services row offers, in the order they sit on screen.
  *
- * One enum rather than five parameters, because every one of them is the same
- * thing from the row's point of view -- a labelled two-state control that says its
- * label, its role and its state -- and the row's whole job is to render them
- * identically. What each one actually does is `MainActivity`'s business; see
+ * One enum rather than seven parameters, because every one of them is the same
+ * thing from the row's point of view -- a labelled control that says its label,
+ * its role and its state -- and the row's whole job is to render them
+ * identically. All but [SPEAKING_RATE] are two-state; that one has three values,
+ * held as a [SpeakingRate] rather than as membership of the row's set. What each
+ * one actually does is `MainActivity`'s business; see
  * `MainActivity.toggle`.
  *
  * [SUPPRESS] is not [DESCRIPTION] with a different name. The first is a moment --
@@ -46,6 +48,7 @@ enum class AccessService(val label: String, private val onWord: String = "on", p
     CAPTIONS("Captions"),
     SUPPRESS("Suppress description"),
     SCREEN_CURTAIN("Screen curtain"),
+    SPEAKING_RATE("Speaking rate"),
     ;
 
     /** The state word the control says and shows: "on"/"off", or "short"/"long". */
@@ -74,6 +77,45 @@ object TitleDescriptions {
 }
 
 /**
+ * How fast Baton's own voice speaks (PRD.md user story 30): every description,
+ * spoken subtitle, the disclosure and the row's own narration, and none of
+ * VoiceView's, which keeps its own rate.
+ *
+ * [multiplier] is what `TextToSpeech.setSpeechRate` is given, 1.0 being the
+ * engine's normal. The values are a calibration knob, not a measurement: nobody
+ * has yet listened to the three on the Stick and picked them.
+ */
+enum class SpeakingRate(val word: String, val multiplier: Float) {
+    SLOWER("slower", 0.85f),
+    NORMAL("normal", 1.0f),
+    FASTER("faster", 1.2f),
+    ;
+
+    /** One press on the control: Slower, Normal, Faster, and round to Slower again. */
+    fun next(): SpeakingRate = entries[(ordinal + 1) % entries.size]
+}
+
+/**
+ * The [SpeakingRate], in `SharedPreferences` so it survives a restart. Global, not
+ * per title like [TitleDescriptions]: it is how this viewer hears, not a fact about
+ * a film. Nothing stored is [SpeakingRate.NORMAL], and so is a value this build
+ * does not know.
+ */
+object SpeakingRates {
+    private const val PREFS = "speaking_rate"
+    private const val KEY = "rate"
+
+    fun get(context: Context): SpeakingRate {
+        val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
+        return SpeakingRate.entries.firstOrNull { it.name == stored } ?: SpeakingRate.NORMAL
+    }
+
+    fun set(context: Context, rate: SpeakingRate) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, rate.name).apply()
+    }
+}
+
+/**
  * The access-services row (issue #7): the controls EN 301 549 clause 7.3 requires
  * to sit at the same prominence as play and pause, which is why they are one
  * D-pad press below the transport bar rather than inside a settings tree.
@@ -95,7 +137,7 @@ object TitleDescriptions {
  * flips. The press is announced by the caller that owns the state, the way
  * `MainActivity.togglePlayback` already announces Play/Pause.
  *
- * A [FlowRow], not a Row: six labels are wider than a 1920 px screen, and on the
+ * A [FlowRow], not a Row: seven labels are wider than a 1920 px screen, and on the
  * Stick a Row squeezed "Screen curtain: off" into a one-letter-wide column. Wrapping
  * keeps every label whole; Down still reaches the first line.
  */
@@ -106,6 +148,7 @@ fun AccessServicesRow(
     onToggle: (AccessService) -> Unit,
     announce: (String) -> Unit,
     modifier: Modifier = Modifier,
+    rate: SpeakingRate = SpeakingRate.NORMAL,
 ) {
     FlowRow(
         modifier,
@@ -113,7 +156,12 @@ fun AccessServicesRow(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         for (service in AccessService.entries) {
-            AccessToggle(service, service in on, onToggle, announce)
+            if (service == AccessService.SPEAKING_RATE) {
+                AccessToggle(service, TransportNarration.rate(rate), rate.word, onToggle, announce)
+            } else {
+                val state = service in on
+                AccessToggle(service, TransportNarration.toggle(service, state), service.state(state), onToggle, announce)
+            }
         }
     }
 }
@@ -122,11 +170,11 @@ fun AccessServicesRow(
 @Composable
 private fun AccessToggle(
     service: AccessService,
-    on: Boolean,
+    spoken: String,
+    state: String,
     onToggle: (AccessService) -> Unit,
     announce: (String) -> Unit,
 ) {
-    val spoken = TransportNarration.toggle(service, on)
     Button(
         onClick = { onToggle(service) },
         modifier = Modifier
@@ -136,7 +184,7 @@ private fun AccessToggle(
             }
             .onFocusChanged { if (it.isFocused) announce(spoken) },
     ) {
-        Text("${service.label}: ${service.state(on)}")
+        Text("${service.label}: $state")
     }
 }
 

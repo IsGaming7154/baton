@@ -148,7 +148,13 @@ class TtsSpeechSynth private constructor(
          * theoretical -- IVONA has a voice only on a device where the screen
          * reader has been enabled at least once.
          */
-        fun select(context: Context, outputDir: File, preferredLocale: Locale, log: (String) -> Unit): TtsSpeechSynth? {
+        fun select(
+            context: Context,
+            outputDir: File,
+            preferredLocale: Locale,
+            log: (String) -> Unit,
+            speechRate: Float = 1.0f,
+        ): TtsSpeechSynth? {
             outputDir.mkdirs()
             val probes = mutableListOf<EngineProbe>()
 
@@ -188,7 +194,11 @@ class TtsSpeechSynth private constructor(
                         continue
                     }
 
-                    log("engine selected $packageName locale=${locale.toLanguageTag()}")
+                    // Once, here, before anything is rendered: every render and every
+                    // duration measured off it is then at this rate. Set on the instance,
+                    // so it is Baton's alone and VoiceView keeps the rate it has.
+                    val rateStatus = engine.setSpeechRate(speechRate)
+                    log("engine selected $packageName locale=${locale.toLanguageTag()} speechRate=$speechRate status=$rateStatus")
                     return TtsSpeechSynth(engine, packageName, outputDir, locale, probes, log)
                 } catch (t: Throwable) {
                     probes += EngineProbe(packageName, TextToSpeech.ERROR, 0, 0, t.toString())
