@@ -1,6 +1,5 @@
 package dev.baton.tv
 
-import android.content.Context
 import android.media.audiofx.Visualizer
 import kotlin.concurrent.thread
 import kotlin.math.log10
@@ -39,7 +38,7 @@ object OutputMeter {
      * lands in the same timeline as `output duck` and `speech started`, and the
      * three can be read against each other by timestamp.
      */
-    fun start(context: Context, log: (String) -> Unit) {
+    fun start(log: (String) -> Unit) {
         if (running) return
         running = true
         thread(name = "baton-meter", isDaemon = true) {

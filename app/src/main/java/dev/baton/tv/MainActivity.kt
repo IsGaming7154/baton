@@ -167,7 +167,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         overlayEnabled = intent.getBooleanExtra("overlay", false)
         // Debug builds only; the release variant's OutputMeter does nothing. See OutputMeter.
-        if (intent.getBooleanExtra("meter", false)) OutputMeter.start(this, ::log)
+        if (intent.getBooleanExtra("meter", false)) OutputMeter.start(::log)
         services = buildSet {
             if (intent.getBooleanExtra("spokenSubtitles", true)) add(AccessService.SPOKEN_SUBTITLES)
             add(AccessService.CAPTIONS)

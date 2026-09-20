@@ -66,7 +66,7 @@ This is the command that is known to work. Run here with `--rerun-tasks`, so not
 
 **405 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
 
-That is 340 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,175,396 bytes after `./gradlew clean` (an incremental build lands around 400 KB larger).
+That is 340 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,175,312 bytes after `./gradlew clean` (an incremental build lands around 400 KB larger).
 
 Nothing here needs a device, a network, an emulator, or an AWS account. `:director`, `:loudness` and `:pipeline` are pure-JVM modules and their tests are plain JUnit.
 
@@ -314,7 +314,7 @@ The feature request writes itself, because Amazon has already built it. `@amazon
 | Number | Source |
 |---|---|
 | 405 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
-| APK 32,175,396 bytes after `./gradlew clean` (an incremental build lands around 400 KB larger) | `app/build/outputs/apk/debug/app-debug.apk` |
+| APK 32,175,312 bytes after `./gradlew clean` (an incremental build lands around 400 KB larger) | `app/build/outputs/apk/debug/app-debug.apk` |
 | Demo clip: 88.6 s, 854×356 H.264, AAC 48 kHz stereo | `ffprobe` |
 | Demo clip: −30.3 LUFS integrated, LRA 20.0 LU | `ffmpeg -af ebur128` |
 | −23.0 / −33.0 LUFS on EBU Tech 3341 signals | `:loudness` tests, run here |

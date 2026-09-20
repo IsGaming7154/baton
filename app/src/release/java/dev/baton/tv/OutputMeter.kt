@@ -1,7 +1,5 @@
 package dev.baton.tv
 
-import android.content.Context
-
 /**
  * The shipped twin of the debug [OutputMeter]: it does nothing, and exists so
  * `MainActivity` can call the meter unconditionally while the release variant
@@ -9,7 +7,8 @@ import android.content.Context
  * a measuring tool for us, not a feature for a viewer.
  */
 object OutputMeter {
-    fun start(context: Context, log: (String) -> Unit) = Unit
+    @Suppress("UNUSED_PARAMETER")
+    fun start(log: (String) -> Unit) = Unit
 
     fun stop() = Unit
 }
