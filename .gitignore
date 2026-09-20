@@ -40,3 +40,6 @@ assets/media/
 
 # Claude Code local state (agent worktrees, settings) -- never pushed
 .claude/
+
+# The release signing key's path and passwords.
+keystore.properties
