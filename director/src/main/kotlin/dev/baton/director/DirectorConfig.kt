@@ -77,11 +77,17 @@ data class DirectorConfig(
      * voice lands roughly 15.5 LU above the bed instead of the configured
      * 12.5.
      *
-     * That behaviour is source-established for a stereo mixer and
-     * **unconfirmed on the Fire TV** until a capture measurement is taken --
-     * which is exactly why this is a knob and not a hard-coded literal. If a
-     * device measurement shows a vendor pan law that already levels the
-     * duplication, this is set to 0 and the rule in [duckFor] is untouched.
+     * Confirmed on the Fire TV Stick (AFTSSS, Fire OS 7.7.1.5) on 2026-09-20,
+     * by playing the same pink noise twice -- once as a mono file, once already
+     * copied into both channels -- and reading the output mix with
+     * `OutputMeter`: the two differed by 0.18 dB, so this device duplicates at
+     * full level and applies no pan law. Measured against the voice with a
+     * stereo bed and this offset at zero, the voice sat 15.1 LU above the
+     * ducked bed where 12.5 was asked for.
+     *
+     * It stays a knob rather than a literal because a device that does apply a
+     * pan law would need it set to 0, and the rule in [duckFor] is then
+     * untouched.
      */
     val narrationMonoToStereoOffsetDb: Double = DEFAULT_NARRATION_MONO_TO_STEREO_OFFSET_DB,
     /**

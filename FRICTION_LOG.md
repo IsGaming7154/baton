@@ -332,9 +332,9 @@ The request for Fire OS is simply that this reach API 28's installed base, which
 
 ---
 
-## 13. A mono narration duplicated to a stereo output would measure 3 dB hotter than it was rendered at, so a duck computed from it would come out about 3 dB too deep
+## 13. A mono narration is duplicated to a stereo output with no pan law, so it measures 3 dB hotter than it was rendered at and every duck computed from it came out 3 dB too deep
 
-**Severity:** high — a duck computed from the mono measurement would come out about 3 dB too deep, pending device confirmation
+**Severity:** high — measured on the device: the voice sat 15.1 LU above the ducked bed where 12.5 was asked for
 **Area:** Fire OS audio framework (API 28) / loudness calibration
 
 **What was attempted.** Baton renders and measures its narration as mono at −27 LKFS (`SpeechClarity`, matching the −27 LKFS Amazon Prime Video and Netflix both specify for description narration), then computes how far to duck the programme bed from that measurement together with the programme's own BS.1770 loudness.
@@ -345,9 +345,15 @@ BS.1770 sums power across channels, so a signal duplicated identically to both c
 
 **Sources.** LineageOS `android_frameworks_av`, branch `lineage-16.0` (Android 9): `media/libaudioprocessing/AudioMixer.cpp:252-257` (the MONO_HACK comment and the mono→stereo early return), `media/libaudioprocessing/AudioResamplerFirProcess.h:231-242` (the `CHANNELS == 1` branch writing one sample to both outputs), `media/libaudioprocessing/AudioMixerOps.h:294-299` (`MIXTYPE_MONOEXPAND`).
 
-**Status.** Source-established for a stereo mixer on this LineageOS mirror of `frameworks/av`. **Not yet confirmed on the Fire TV** — nothing has captured the Stick's actual HDMI output to measure the duplication directly (see entry 15 for why that capture doesn't exist yet).
+**Status.** Source-established for a stereo mixer on this LineageOS mirror of `frameworks/av`, and **confirmed on the Fire TV Stick on 2026-09-20** — without the HDMI capture entry 15 is still waiting for.
 
-**Workaround.** A proposed configurable offset — `narrationMonoToStereoOffsetDb`, defaulting to `10·log10(2)` — in the duck-depth rule, settable to `0` if a device measurement ever shows a vendor-supplied pan law that already levels the duplication. This lives on an unmerged branch, waiting on a device capture measurement — it is not part of this tree's history and is not shipped.
+`OutputMeter` (debug-only, `--ez meter true`) reads the device's own output mix through `android.media.audiofx.Visualizer` on session 0. Its PEAK_RMS measurement averages power over the interleaved stereo samples — `rmsSqAcc / (frameCount * mChannelCount)`, `media/libeffects/visualizer/EffectVisualizer.cpp:333-344` — so a channel duplication is invisible to it and a pan law is not. That is exactly the discriminator this entry needed:
+
+- **The duplication carries no pan law.** The same 90 s of pink noise, played once as a mono file and once already copied into both channels at the same per-channel amplitude, read −28.93 and −29.11 dBFS at the output. A pan law would have put the mono file 3 dB lower; 0.18 dB says the Stick copies at full level.
+- **The error is the predicted size.** With a stereo bed (pink noise, −20.6 LUFS as both `ffmpeg` and Baton measure it) and the offset at zero, Baton asked for −18.9 dB, the output dropped −19.0 dB, and the voice — measured alone over a silent film at −33.0 dBFS — sat **15.1 LU** above the ducked bed. The rule had asked for 12.5.
+- **The rest of the chain is sound.** Over 343 settled samples the output tracked the requested gain at a slope of 0.997 dB/dB, residual RMS 0.64 dB, and Baton's own BS.1770 meter read the reference at −23.2 LUFS, the same figure `ffmpeg`'s `ebur128` gives it. The 3 dB was the only error in the chain.
+
+**Workaround.** A configurable offset — `narrationMonoToStereoOffsetDb`, defaulting to `10·log10(2)` — added to the narration's measured level in the duck-depth rule, so the rule works from the voice as heard rather than as measured. It is a knob and not a literal because a device that does apply a pan law would need it at `0`. Shipped once the measurement above confirmed it.
 
 **Ask.** Documented channel-mapping and gain behaviour for mono tracks on Fire OS audio outputs, including HDMI: whether any Fire TV device applies a pan law the stock AOSP mixer does not, and whether that differs from what a Stick with no internal speaker does over HDMI passthrough.
 
