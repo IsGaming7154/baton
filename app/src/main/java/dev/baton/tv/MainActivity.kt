@@ -166,6 +166,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         overlayEnabled = intent.getBooleanExtra("overlay", false)
+        // Debug builds only; the release variant's OutputMeter does nothing. See OutputMeter.
+        if (intent.getBooleanExtra("meter", false)) OutputMeter.start(this, ::log)
         services = buildSet {
             if (intent.getBooleanExtra("spokenSubtitles", true)) add(AccessService.SPOKEN_SUBTITLES)
             add(AccessService.CAPTIONS)
@@ -173,9 +175,16 @@ class MainActivity : ComponentActivity() {
         speakingRate = SpeakingRates.get(this)
 
         player = BatonPlayer(this, ::log)
-        // The second URI is the clip's English SubRip sidecar.
+        // The second URI is the clip's English SubRip sidecar. `--es media <uri>`
+        // swaps the picture and bed for another file of the same length -- a
+        // measurement hook, so a duck can be read off a stationary signal instead
+        // of off a film whose own level moves several dB between meter samples.
+        // The subtitle sidecar stays, so every cue still comes due where it does
+        // in the film.
+        val media = intent.getStringExtra("media")
+        if (media != null) log("media override uri=$media")
         player.setSource(
-            Uri.parse("android.resource://$packageName/${R.raw.sample_clip}"),
+            media?.let(Uri::parse) ?: Uri.parse("android.resource://$packageName/${R.raw.sample_clip}"),
             Uri.parse("android.resource://$packageName/${R.raw.sample_clip_en}"),
         )
         player.exoPlayer.addListener(object : Player.Listener {
@@ -257,7 +266,7 @@ class MainActivity : ComponentActivity() {
                 if (intent.getBooleanExtra("descriptions", true) && TitleDescriptions.isOn(this, prepared.track.sourceId)) {
                     services = services + AccessService.DESCRIPTION
                 }
-                val audioSpeaker = RenderedAudioSpeaker(::log)
+                val audioSpeaker = RenderedAudioSpeaker(::log, muted = intent.getBooleanExtra("silentVoice", false))
                 speaker = audioSpeaker
                 val running = Tracer(
                     clock = player.clock,
@@ -573,6 +582,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        OutputMeter.stop()
         handler.removeCallbacks(heartbeat)
         tracer?.stop()
         speaker?.release()

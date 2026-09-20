@@ -60,6 +60,7 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class RenderedAudioSpeaker(
     private val log: (String) -> Unit,
+    private val muted: Boolean = false,
 ) : Speaker {
 
     override var onSpeechEnded: ((UtteranceId) -> Unit)? = null
@@ -168,6 +169,12 @@ class RenderedAudioSpeaker(
             .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
         track = audioTrack
+        // A measurement, not a feature: with the voice at zero the director still
+        // holds the floor and the player still ducks for exactly as long, so what
+        // reaches the output is the bed alone, ducked. It is the only way to read
+        // the applied duck off the real output without separating two mixed
+        // signals. Reached by `--ez silentVoice true` on a debug build.
+        if (muted) audioTrack.setVolume(0f)
 
         if (generation.get() != mine) {
             discardTrack()

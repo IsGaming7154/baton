@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Debug only, and deliberately not in the main manifest: RECORD_AUDIO is what
+    android.media.audiofx.Visualizer demands to meter the output mix (session 0),
+    and OutputMeter is the only thing in Baton that asks for it. The release
+    variant compiles the no-op OutputMeter in `src/release` and ships neither the
+    permission nor the class.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- For the media override in MainActivity.onCreate, which reads a reference file from /sdcard. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+</manifest>
