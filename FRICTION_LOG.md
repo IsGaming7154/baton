@@ -37,6 +37,17 @@ The app also appears on the Fire TV home row with its banner, because it declare
 
 **The remote.** Play/pause, rewind and fast-forward come from the Media3 transport bar, which takes D-pad left/right and the dedicated media keys. `adb shell input keyevent 85` (play/pause), `89` (rewind) and `90` (fast-forward) drive the same path over the wire.
 
+**Measuring what it actually puts out.** A debug build carries `OutputMeter`, which reads the device's own output mix through `android.media.audiofx.Visualizer` on session 0 and logs its level beside every duck decision. The release variant compiles a no-op twin, so neither it nor RECORD_AUDIO ships.
+
+```sh
+adb shell pm grant dev.baton.tv android.permission.RECORD_AUDIO
+adb shell pm grant dev.baton.tv android.permission.READ_EXTERNAL_STORAGE
+adb push reference.mp4 /sdcard/reference.mp4
+adb shell am start -S -n dev.baton.tv/.MainActivity     --ez meter true --ez silentVoice true --es media file:///sdcard/reference.mp4
+```
+
+`--ez meter true` starts the meter. `--ez silentVoice true` plays the narration at zero volume, so the director still holds the floor and the player still ducks for exactly as long, and what reaches the output is the bed alone -- the only way to read an applied duck off a mixed output without separating two signals. `--es media <uri>` puts another file of the same length in place of the clip, so a duck can be read off a stationary signal instead of off a film whose own level moves several dB between meter samples; the subtitle sidecar stays, so every cue still comes due where it does in the film. Entry 13 is what these were built to settle.
+
 **Removing it:** `adb uninstall dev.baton.tv`.
 
 **Two things that will waste an afternoon if you skip them.** `minSdk` is what governs whether the Stick will install the APK; `compileSdk` is 35 for the reason in entry 8 and is unrelated. And engine selection depends on `<queries>` for `android.intent.action.TTS_SERVICE` in the manifest — without it a build against a newer platform sees an empty device and speaks nothing, with no error.
