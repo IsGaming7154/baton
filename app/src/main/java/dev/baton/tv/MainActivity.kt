@@ -1,5 +1,6 @@
 package dev.baton.tv
 
+import android.annotation.SuppressLint
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -409,6 +410,16 @@ class MainActivity : ComponentActivity() {
         if (playForMs > 0L) handler.postDelayed({ player.exoPlayer.playWhenReady = false }, playForMs)
     }
 
+    /**
+     * Lint reports `RestrictedApi` here three times, and it is wrong three times:
+     * `dispatchKeyEvent` is declared on `androidx.core.app.ComponentActivity`,
+     * whose *class* carries `@RestrictTo(LIBRARY_GROUP_PREFIX)` (verified in
+     * `core-1.13.1`'s class file), so every override of an Android framework
+     * method that happens to be declared there is flagged. Overriding it and
+     * calling `super` is the documented way to see a key before the view
+     * hierarchy does; the restriction is on androidx's own class, not on this.
+     */
+    @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (RemoteBindings.togglesPlayback(event.keyCode, event.action, event.repeatCount)) {
             togglePlayback()

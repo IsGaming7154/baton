@@ -66,9 +66,11 @@ This is the command that is known to work. Run here with `--rerun-tasks`, so not
 
 **405 test executions, 0 failures, 0 errors, 0 skipped — and 0 Kotlin compiler warnings.**
 
-That is 340 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,175,312 bytes after `./gradlew clean` (an incremental build lands around 400 KB larger).
+That is 340 distinct tests, by classname and name; the Android modules run their suites for both the debug and release variants (`ShellNarrationTest`, `SyntheticVoiceNoticeTest` and `AccessServicesRowTest` run on debug only), which accounts for 64 of the other 65 executions — the last is `DescriptionTrackBuilderTest`'s two independent tests that happen to share the display name "golden file". The APK lands at `app/build/outputs/apk/debug/app-debug.apk`, 32,175,3xx bytes after `./gradlew clean` — the last few bytes move between builds because the zip carries its own timestamps, and an incremental build lands around 400 KB larger.
 
 Nothing here needs a device, a network, an emulator, or an AWS account. `:director`, `:loudness` and `:pipeline` are pure-JVM modules and their tests are plain JUnit.
+
+`./gradlew build` — the whole thing, lint included — also passes: 0 lint errors, 16 lint warnings, none of them new. This was verified the way a reviewer meets it, by cloning this repository into an empty directory and running both commands with nothing set but `ANDROID_HOME` and `JAVA_HOME`: 3 minutes 4 seconds to `BUILD SUCCESSFUL` on a machine whose Gradle cache was already warm, 405 executions, and a debug APK the same size as the one above. Two lint false positives are suppressed at the narrowest scope and each carries a comment saying why: `RestrictedApi` on `MainActivity.dispatchKeyEvent`, because `androidx.core.app.ComponentActivity` carries a class-level `@RestrictTo(LIBRARY_GROUP_PREFIX)` and so every override of a framework method declared there is flagged, and `RememberReturnType` in `AccessServicesRowTest`, which lint reads as returning `Unit` when it returns a `MutableState`.
 
 ### `:player:lintDebug` and Media3's `@UnstableApi` surface
 
@@ -314,7 +316,7 @@ The feature request writes itself, because Amazon has already built it. `@amazon
 | Number | Source |
 |---|---|
 | 405 test executions, 0 failures, 0 errors, 0 Kotlin warnings | Run in this repository, full task rerun |
-| APK 32,175,312 bytes after `./gradlew clean` (an incremental build lands around 400 KB larger) | `app/build/outputs/apk/debug/app-debug.apk` |
+| APK 32,175,3xx bytes after `./gradlew clean` — the last few bytes move between builds because the zip carries its own timestamps, and an incremental build lands around 400 KB larger | `app/build/outputs/apk/debug/app-debug.apk` |
 | Demo clip: 88.6 s, 854×356 H.264, AAC 48 kHz stereo | `ffprobe` |
 | Demo clip: −30.3 LUFS integrated, LRA 20.0 LU | `ffmpeg -af ebur128` |
 | −23.0 / −33.0 LUFS on EBU Tech 3341 signals | `:loudness` tests, run here |

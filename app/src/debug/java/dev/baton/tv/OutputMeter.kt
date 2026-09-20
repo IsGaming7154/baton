@@ -1,6 +1,7 @@
 package dev.baton.tv
 
 import android.media.audiofx.Visualizer
+import java.util.Locale
 import kotlin.concurrent.thread
 import kotlin.math.log10
 import kotlin.math.sqrt
@@ -90,5 +91,6 @@ object OutputMeter {
         return 20 * log10(sqrt(sum / wave.size) + 1e-9)
     }
 
-    private fun format(value: Double): String = String.format("%.1f", value)
+    /** [Locale.ROOT], so a device in a comma-decimal locale does not log `-44,7` and break every parse of these lines. */
+    private fun format(value: Double): String = String.format(Locale.ROOT, "%.1f", value)
 }

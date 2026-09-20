@@ -59,7 +59,16 @@ class AccessServicesRowTest {
     private val heard = mutableListOf<String>()
     private val toggled = mutableListOf<AccessService>()
 
-    /** The shell as `MainActivity` composes it, with the row's state held the way the activity holds it. */
+    /**
+     * The shell as `MainActivity` composes it, with the row's state held the way
+     * the activity holds it.
+     *
+     * The suppression is a lint false positive: `RememberReturnType` reads the
+     * `remember { mutableStateOf(...) }` below as returning `Unit`, which it does
+     * not -- it returns the `MutableState` the `by` delegate reads through. Lint
+     * only makes that mistake in this unit-test source set.
+     */
+    @Suppress("RememberReturnType")
     private fun showShell(initial: Set<AccessService> = DEFAULT_ON) {
         compose.setContent {
             var services by remember { mutableStateOf(initial) }
