@@ -115,6 +115,16 @@ object TrackPreparation {
             log = log,
             speechRate = rate.multiplier,
         )
+        // Spoken on the first render that is not a cache hit, so a warm start
+        // says nothing. The engine serialises it ahead of the renders that
+        // follow, which costs the length of the sentence on a cold start and
+        // buys the viewer the knowledge that anything is happening at all.
+        synth?.let { engine ->
+            engine.onFirstRender = {
+                log("preparing spoken")
+                engine.sayNow(PREPARING_TEXT)
+            }
+        }
         if (synth == null) {
             log(
                 "ERROR no text-to-speech engine reported a usable voice; " +
@@ -254,6 +264,16 @@ object TrackPreparation {
      * is said and what is shown cannot drift apart.
      */
     const val DISCLOSURE_TEXT = "Descriptions in this title use a synthetic voice."
+
+    /**
+     * Said while the track is being prepared, on screen ([PreparingNotice]) and
+     * out loud through the engine the moment one is selected.
+     *
+     * Spoken only when something actually has to be rendered: with a warm cache
+     * preparation is over in a second or two, and announcing a wait that is not
+     * happening would be its own kind of lie.
+     */
+    const val PREPARING_TEXT = "Preparing audio description. This takes about twenty seconds."
 
     private fun measure(cue: Cue, synth: SpeechSynth, log: (String) -> Unit): Cue {
         val variants = cue.variants.mapIndexed { index, variant ->

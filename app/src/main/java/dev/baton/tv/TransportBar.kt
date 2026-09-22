@@ -154,9 +154,20 @@ object TransportNarration {
      * 2026-09-16, it was the difference between ~16 s and 23.4 s of preparation.
      * A toggle focused before then is logged `not-rendered` and stays silent.
      */
+    /**
+     * Said once, just after the disclosure, when the title's descriptions are
+     * stored off -- which is what every title starts as, on purpose (issue #13:
+     * the Fire TV defect this project was written against is description that
+     * cannot be turned off per title). The cost of that decision is a viewer who
+     * turns Baton on and hears no description at all and has no way of knowing
+     * why, so the app says which state it is in and which two presses change it.
+     */
+    const val DESCRIPTION_OFF_HINT: String =
+        "Description is off for this title. Press Down, then Select, to turn it on."
+
     val AT_START: List<String> =
         listOf(REWIND, PLAY, PAUSE, FAST_FORWARD).map(::focused) +
-            state(playing = true) + state(playing = false)
+            state(playing = true) + state(playing = false) + DESCRIPTION_OFF_HINT
 
     val AFTER_START: List<String> =
         (AccessService.entries - AccessService.SPEAKING_RATE)

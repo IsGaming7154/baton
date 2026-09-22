@@ -84,6 +84,12 @@ class MainActivity : ComponentActivity() {
      */
     private var trackReady = false
 
+    /** Drives [PreparingNotice]: true from launch until the track is ready to play. */
+    private var preparing by mutableStateOf(true)
+
+    /** The spoken disclosure's measured length, so the hint after it does not land on top of it. */
+    private var disclosureMs = 0L
+
     /**
      * The track whose synthetic-voice notice is on screen. Set when preparation returns it,
      * which is when playback starts, and cleared [NOTICE_MS] later so the notice does not
@@ -206,6 +212,9 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.align(Alignment.TopStart).padding(32.dp),
                     )
                 }
+                if (preparing) {
+                    PreparingNotice(Modifier.align(Alignment.Center).padding(32.dp))
+                }
                 noticeTrack?.let {
                     SyntheticVoiceNotice(it, Modifier.align(Alignment.TopEnd).padding(32.dp))
                 }
@@ -267,6 +276,7 @@ class MainActivity : ComponentActivity() {
                 if (intent.getBooleanExtra("descriptions", true) && TitleDescriptions.isOn(this, prepared.track.sourceId)) {
                     services = services + AccessService.DESCRIPTION
                 }
+                disclosureMs = prepared.disclosure?.measuredDuration?.millis ?: 0L
                 val audioSpeaker = RenderedAudioSpeaker(::log, muted = intent.getBooleanExtra("silentVoice", false))
                 speaker = audioSpeaker
                 val running = Tracer(
@@ -310,6 +320,7 @@ class MainActivity : ComponentActivity() {
             }
 
             trackReady = true
+            preparing = false
             // Preparation takes ~16 s, and the activity can be stopped by the time it
             // returns -- launched under the screensaver, say, which stops it at once.
             // Starting then played the film and every voice behind the screensaver,
@@ -408,6 +419,33 @@ class MainActivity : ComponentActivity() {
         player.play()
         val playForMs = intent.getLongExtra("playForMs", 0L)
         if (playForMs > 0L) handler.postDelayed({ player.exoPlayer.playWhenReady = false }, playForMs)
+        announceDescriptionOffHint()
+    }
+
+    /**
+     * Says, once, that this title's descriptions are off and which two presses
+     * turn them on -- see [TransportNarration.DESCRIPTION_OFF_HINT].
+     *
+     * After the disclosure rather than with it: both are Baton's voice at the
+     * very start, and a reactive utterance would preempt the disclosure rather
+     * than wait for it. The state is read again when it speaks, because the
+     * viewer may have turned description on in the meantime and then the hint is
+     * simply wrong.
+     */
+    private fun announceDescriptionOffHint() {
+        // `--ez descriptions false` withheld them at the source: there is
+        // nothing rendered for the row to turn on, so there is nothing to say.
+        if (!intent.getBooleanExtra("descriptions", true)) return
+        if (titleId == null || AccessService.DESCRIPTION in services) return
+        handler.postDelayed(
+            {
+                if (AccessService.DESCRIPTION !in services) {
+                    log("description off hint")
+                    announce(TransportNarration.DESCRIPTION_OFF_HINT)
+                }
+            },
+            disclosureMs + HINT_AFTER_DISCLOSURE_MS,
+        )
     }
 
     /**
@@ -609,6 +647,9 @@ class MainActivity : ComponentActivity() {
     private companion object {
         /** One tag for the whole timeline. `adb logcat -s Baton:V`. */
         const val TAG = "Baton"
+
+        /** The gap between the disclosure ending and the description-off hint starting. */
+        const val HINT_AFTER_DISCLOSURE_MS = 500L
 
         /** How long the synthetic-voice notice stays on screen once playback starts. */
         const val NOTICE_MS = 10_000L

@@ -52,8 +52,16 @@ class TtsSpeechSynth private constructor(
     private val outputDir: File,
     val localeUsed: Locale?,
     val probes: List<EngineProbe>,
+    private val speechRate: Float,
     private val log: (String) -> Unit,
 ) : SpeechSynth {
+
+    /**
+     * Run once, before the first render that is not a cache hit. It is how the
+     * app says out loud that it is preparing, and only when there is something
+     * to prepare: see `TrackPreparation.PREPARING_TEXT`.
+     */
+    var onFirstRender: (() -> Unit)? = null
 
     private val pending = HashMap<String, CountDownLatch>()
     private val failures = HashMap<String, String>()
@@ -79,8 +87,24 @@ class TtsSpeechSynth private constructor(
             finish(utteranceId, "onError(utteranceId, $errorCode)")
     }
 
+    /**
+     * Renders [text], or hands back the file a previous launch rendered.
+     *
+     * The cache is what stands between a viewer and twenty seconds of silence on
+     * every start: see [RenderCache]. A hit skips the engine *and* `SpeechClarity`,
+     * because the file on disk has already been through both.
+     */
     override fun render(key: String, text: String): RenderedSpeech {
-        val file = File(outputDir, "$key.wav")
+        val file = File(outputDir, RenderCache.name(key, RenderCache.fingerprint(engineId, localeUsed, speechRate, text)))
+        cached(file)?.let {
+            log("speech cached key=$key file=${file.name} frames=${it.frameCount}")
+            return it
+        }
+        onFirstRender?.let {
+            onFirstRender = null
+            it()
+        }
+        dropStaleRenders(key, file.name)
         file.delete()
 
         val latch = CountDownLatch(1)
@@ -111,6 +135,45 @@ class TtsSpeechSynth private constructor(
             sampleRateHz = wav.sampleRateHz,
             channelCount = wav.channelCount,
         )
+    }
+
+    /**
+     * The rendered file if it is there and readable, and null for anything else
+     * -- missing, truncated by a kill mid-write, or written by a build whose WAV
+     * this one cannot read. A cache that cannot be trusted has to fail by
+     * rendering again, never by playing a bad file.
+     */
+    private fun cached(file: File): RenderedSpeech? {
+        if (!file.isFile || file.length() == 0L) return null
+        return runCatching {
+            val wav = WavAudio.read(file)
+            check(wav.frameCount > 0)
+            RenderedSpeech(
+                audioRef = file.absolutePath,
+                frameCount = wav.frameCount,
+                sampleRateHz = wav.sampleRateHz,
+                channelCount = wav.channelCount,
+            )
+        }.getOrNull()
+    }
+
+    /** Earlier renders of the same key, which nothing will ask for again now the inputs have changed. */
+    private fun dropStaleRenders(key: String, current: String) {
+        outputDir.listFiles()
+            ?.filter { RenderCache.isStaleRender(it.name, key, current) }
+            ?.forEach { stale ->
+                if (stale.delete()) log("speech cache dropped file=${stale.name} key=$key")
+            }
+    }
+
+    /**
+     * Speaks [text] straight out of the engine, without rendering it to a file
+     * or telling the director. For the one thing that has to be said before the
+     * director exists: that Baton is preparing. Nothing else is playing at that
+     * point, so there is nothing to arbitrate with.
+     */
+    fun sayNow(text: String) {
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "say-now")
     }
 
     override fun release() {
@@ -199,7 +262,7 @@ class TtsSpeechSynth private constructor(
                     // so it is Baton's alone and VoiceView keeps the rate it has.
                     val rateStatus = engine.setSpeechRate(speechRate)
                     log("engine selected $packageName locale=${locale.toLanguageTag()} speechRate=$speechRate status=$rateStatus")
-                    return TtsSpeechSynth(engine, packageName, outputDir, locale, probes, log)
+                    return TtsSpeechSynth(engine, packageName, outputDir, locale, probes, speechRate, log)
                 } catch (t: Throwable) {
                     probes += EngineProbe(packageName, TextToSpeech.ERROR, 0, 0, t.toString())
                     tts?.shutdown()
