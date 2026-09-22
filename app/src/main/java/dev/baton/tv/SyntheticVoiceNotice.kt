@@ -24,6 +24,11 @@ import dev.baton.director.DescriptionTrack
  * `syntheticDub`, shown as written: which dub, and whose voices, are facts about the
  * title, so they come with the title.
  *
+ * The third line is there only when this title's descriptions are stored off.
+ * Baton says that out loud too, but only when the film has left room for it
+ * before its first cue -- on the demo clip it has not, so on screen is the only
+ * place a viewer learns it. See `MainActivity.announceDescriptionOffHint`.
+ *
  * ## Why VoiceView never reads it
  *
  * The director is the only voice, and it already speaks the disclosure; VoiceView reading
@@ -37,8 +42,16 @@ import dev.baton.director.DescriptionTrack
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-fun SyntheticVoiceNotice(track: DescriptionTrack, modifier: Modifier = Modifier) {
-    val lines = listOfNotNull(TrackPreparation.DISCLOSURE_TEXT.takeIf { track.synthetic }, track.syntheticDub)
+fun SyntheticVoiceNotice(
+    track: DescriptionTrack,
+    modifier: Modifier = Modifier,
+    descriptionOff: Boolean = false,
+) {
+    val lines = listOfNotNull(
+        TrackPreparation.DISCLOSURE_TEXT.takeIf { track.synthetic },
+        track.syntheticDub,
+        TransportNarration.DESCRIPTION_OFF_HINT.takeIf { descriptionOff },
+    )
     if (lines.isEmpty()) return
     Column(
         modifier = modifier

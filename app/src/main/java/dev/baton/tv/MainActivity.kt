@@ -28,6 +28,7 @@ import dev.baton.director.DescriptionLength
 import dev.baton.director.DescriptionTrack
 import dev.baton.director.DirectorConfig
 import dev.baton.director.ReactiveRequest
+import dev.baton.director.Speaking
 import dev.baton.director.SpeechLength
 import dev.baton.director.UtteranceId
 import dev.baton.director.UtteranceKind
@@ -87,8 +88,14 @@ class MainActivity : ComponentActivity() {
     /** Drives [PreparingNotice]: true from launch until the track is ready to play. */
     private var preparing by mutableStateOf(true)
 
-    /** The spoken disclosure's measured length, so the hint after it does not land on top of it. */
-    private var disclosureMs = 0L
+    /** The first cue the film schedules, so the description hint can be withheld rather than take its room. */
+    private var firstCueStartMs = Long.MAX_VALUE
+
+    /** True once the disclosure has been heard, which is what the description hint waits for. */
+    private var disclosureSpoken = false
+
+    /** False once the description hint has had its one chance to be said. */
+    private var descriptionHintPending = false
 
     /**
      * The track whose synthetic-voice notice is on screen. Set when preparation returns it,
@@ -216,7 +223,11 @@ class MainActivity : ComponentActivity() {
                     PreparingNotice(Modifier.align(Alignment.Center).padding(32.dp))
                 }
                 noticeTrack?.let {
-                    SyntheticVoiceNotice(it, Modifier.align(Alignment.TopEnd).padding(32.dp))
+                    SyntheticVoiceNotice(
+                        track = it,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(32.dp),
+                        descriptionOff = AccessService.DESCRIPTION !in services,
+                    )
                 }
                 TransportBar(
                     playing = playing,
@@ -276,7 +287,9 @@ class MainActivity : ComponentActivity() {
                 if (intent.getBooleanExtra("descriptions", true) && TitleDescriptions.isOn(this, prepared.track.sourceId)) {
                     services = services + AccessService.DESCRIPTION
                 }
-                disclosureMs = prepared.disclosure?.measuredDuration?.millis ?: 0L
+                firstCueStartMs = prepared.track.cues.minOfOrNull { it.startMs } ?: Long.MAX_VALUE
+                descriptionHintPending = intent.getBooleanExtra("descriptions", true) &&
+                    AccessService.DESCRIPTION !in services
                 val audioSpeaker = RenderedAudioSpeaker(::log, muted = intent.getBooleanExtra("silentVoice", false))
                 speaker = audioSpeaker
                 val running = Tracer(
@@ -304,10 +317,9 @@ class MainActivity : ComponentActivity() {
                     } else {
                         {}
                     },
-                    onSpeakingChanged = if (overlayEnabled) {
-                        { utterance -> overlayState = overlayState.copy(speaking = utterance) }
-                    } else {
-                        {}
+                    onSpeakingChanged = { utterance ->
+                        if (overlayEnabled) overlayState = overlayState.copy(speaking = utterance)
+                        onSpeakingChanged(utterance)
                     },
                 )
                 tracer = running
@@ -419,33 +431,46 @@ class MainActivity : ComponentActivity() {
         player.play()
         val playForMs = intent.getLongExtra("playForMs", 0L)
         if (playForMs > 0L) handler.postDelayed({ player.exoPlayer.playWhenReady = false }, playForMs)
-        announceDescriptionOffHint()
+    }
+
+    /**
+     * Follows what is speaking, so the description hint can wait for the
+     * disclosure to finish rather than guess at when that will be.
+     *
+     * A first attempt timed the hint from the moment playback started, which
+     * under-counted the director's own start by about 600 ms and preempted the
+     * disclosure's last syllable on the Stick (`floor released by=preempted`,
+     * 2026-09-22). The end of an utterance is an event, so it is read as one.
+     */
+    private fun onSpeakingChanged(utterance: Speaking.Utterance?) {
+        if (utterance?.id?.value == DISCLOSURE_ID) disclosureSpoken = true
+        if (utterance != null || !disclosureSpoken || !descriptionHintPending) return
+        descriptionHintPending = false
+        handler.post(::announceDescriptionOffHint)
     }
 
     /**
      * Says, once, that this title's descriptions are off and which two presses
      * turn them on -- see [TransportNarration.DESCRIPTION_OFF_HINT].
      *
-     * After the disclosure rather than with it: both are Baton's voice at the
-     * very start, and a reactive utterance would preempt the disclosure rather
-     * than wait for it. The state is read again when it speaks, because the
-     * viewer may have turned description on in the meantime and then the hint is
-     * simply wrong.
+     * Said only when the film has left room for it. A reactive utterance
+     * preempts whatever is speaking and holds the floor until it is done, so a
+     * hint that overruns the gap costs the film its first spoken subtitle --
+     * which is what happened on the Stick before this check existed (`cue
+     * dropped id=s1 ... floorHeldBy=UI_NARRATION`). Better to say nothing than
+     * to take a line of the film's own dialogue away to say it.
      */
     private fun announceDescriptionOffHint() {
-        // `--ez descriptions false` withheld them at the source: there is
-        // nothing rendered for the row to turn on, so there is nothing to say.
-        if (!intent.getBooleanExtra("descriptions", true)) return
-        if (titleId == null || AccessService.DESCRIPTION in services) return
-        handler.postDelayed(
-            {
-                if (AccessService.DESCRIPTION !in services) {
-                    log("description off hint")
-                    announce(TransportNarration.DESCRIPTION_OFF_HINT)
-                }
-            },
-            disclosureMs + HINT_AFTER_DISCLOSURE_MS,
-        )
+        if (AccessService.DESCRIPTION in services) return
+        val hintMs = narration[TransportNarration.DESCRIPTION_OFF_HINT]?.measuredDuration?.millis ?: return
+        val positionMs = player.exoPlayer.currentPosition
+        val roomMs = firstCueStartMs - positionMs - DirectorConfig.DEFAULT_GUARD_MS
+        if (roomMs < hintMs) {
+            log("description off hint withheld roomMs=$roomMs hintMs=$hintMs nextCueMs=$firstCueStartMs")
+            return
+        }
+        log("description off hint roomMs=$roomMs hintMs=$hintMs")
+        announce(TransportNarration.DESCRIPTION_OFF_HINT)
     }
 
     /**
@@ -648,8 +673,8 @@ class MainActivity : ComponentActivity() {
         /** One tag for the whole timeline. `adb logcat -s Baton:V`. */
         const val TAG = "Baton"
 
-        /** The gap between the disclosure ending and the description-off hint starting. */
-        const val HINT_AFTER_DISCLOSURE_MS = 500L
+        /** The disclosure's utterance id, as the director gives it. */
+        const val DISCLOSURE_ID = "disclosure"
 
         /** How long the synthetic-voice notice stays on screen once playback starts. */
         const val NOTICE_MS = 10_000L

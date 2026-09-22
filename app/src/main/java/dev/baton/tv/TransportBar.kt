@@ -163,7 +163,7 @@ object TransportNarration {
      * why, so the app says which state it is in and which two presses change it.
      */
     const val DESCRIPTION_OFF_HINT: String =
-        "Description is off for this title. Press Down, then Select, to turn it on."
+        "Description is off. Press Down, then Select to turn it on."
 
     val AT_START: List<String> =
         listOf(REWIND, PLAY, PAUSE, FAST_FORWARD).map(::focused) +
