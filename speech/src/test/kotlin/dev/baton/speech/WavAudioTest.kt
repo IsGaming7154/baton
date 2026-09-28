@@ -61,7 +61,7 @@ class WavAudioTest : FunSpec({
  * overrides the length in the data chunk header, which is how a synthesizer that
  * was interrupted leaves the file.
  */
-private fun wav(
+internal fun wav(
     sampleRateHz: Int,
     channels: Int,
     frames: Int,

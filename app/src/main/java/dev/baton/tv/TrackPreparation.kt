@@ -10,9 +10,13 @@ import dev.baton.director.UtteranceKind.Scheduled
 import dev.baton.director.Variant
 import dev.baton.director.parseSubtitles
 import dev.baton.ports.SpeechSynth
+import dev.baton.speech.RenderCache
 import dev.baton.speech.TtsSpeechSynth
+import dev.baton.speech.WarmStartSynth
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.CompletableFuture
+import kotlin.concurrent.thread
 
 /**
  * A track the director may act on, the disclosure sentence it may owe, the transport
@@ -108,23 +112,43 @@ object TrackPreparation {
             .use { it.readBytes().toString(Charsets.UTF_8) }
             .let(::parseSubtitles)
 
-        val synth = TtsSpeechSynth.select(
-            context = context,
-            outputDir = File(context.cacheDir, "speech"),
-            preferredLocale = Locale.forLanguageTag(authored.locale),
-            log = log,
-            speechRate = rate.multiplier,
-        )
-        // Spoken on the first render that is not a cache hit, so a warm start
-        // says nothing. The engine serialises it ahead of the renders that
-        // follow, which costs the length of the sentence on a cold start and
-        // buys the viewer the knowledge that anything is happening at all.
-        synth?.let { engine ->
-            engine.onFirstRender = {
-                log("preparing spoken")
-                engine.sayNow(PREPARING_TEXT)
-            }
+        val outputDir = File(context.cacheDir, "speech")
+        // Read before the bind starts, because the bind rewrites it.
+        val remembered = RenderCache.remembered(outputDir)
+        // Bound on its own thread, so that a warm start can read its files while
+        // it binds (see WarmStartSynth). Completed exceptionally rather than left
+        // pending if selection throws: a render waiting on it would wait forever.
+        val engine = CompletableFuture<TtsSpeechSynth?>()
+        thread(name = "baton-tts-bind") {
+            runCatching {
+                TtsSpeechSynth.select(
+                    context = context,
+                    outputDir = outputDir,
+                    preferredLocale = Locale.forLanguageTag(authored.locale),
+                    log = log,
+                    speechRate = rate.multiplier,
+                )
+            }.fold(
+                onSuccess = { selected ->
+                    // Spoken on the first render that is not a cache hit, so a warm start
+                    // says nothing. The engine serialises it ahead of the renders that
+                    // follow, which costs the length of the sentence on a cold start and
+                    // buys the viewer the knowledge that anything is happening at all.
+                    selected?.let { bound ->
+                        bound.onFirstRender = {
+                            log("preparing spoken")
+                            bound.sayNow(PREPARING_TEXT)
+                        }
+                    }
+                    engine.complete(selected)
+                },
+                onFailure = { engine.completeExceptionally(it) },
+            )
         }
+        // No remembered identity means nothing was ever rendered here: bind first, as before.
+        val synth: SpeechSynth? = remembered
+            ?.let { WarmStartSynth(outputDir, it, rate.multiplier, engine, log) }
+            ?: engine.get()
         if (synth == null) {
             log(
                 "ERROR no text-to-speech engine reported a usable voice; " +

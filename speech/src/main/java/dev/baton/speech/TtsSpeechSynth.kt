@@ -96,7 +96,7 @@ class TtsSpeechSynth private constructor(
      */
     override fun render(key: String, text: String): RenderedSpeech {
         val file = File(outputDir, RenderCache.name(key, RenderCache.fingerprint(engineId, localeUsed, speechRate, text)))
-        cached(file)?.let {
+        RenderCache.read(file)?.let {
             log("speech cached key=$key file=${file.name} frames=${it.frameCount}")
             return it
         }
@@ -135,26 +135,6 @@ class TtsSpeechSynth private constructor(
             sampleRateHz = wav.sampleRateHz,
             channelCount = wav.channelCount,
         )
-    }
-
-    /**
-     * The rendered file if it is there and readable, and null for anything else
-     * -- missing, truncated by a kill mid-write, or written by a build whose WAV
-     * this one cannot read. A cache that cannot be trusted has to fail by
-     * rendering again, never by playing a bad file.
-     */
-    private fun cached(file: File): RenderedSpeech? {
-        if (!file.isFile || file.length() == 0L) return null
-        return runCatching {
-            val wav = WavAudio.read(file)
-            check(wav.frameCount > 0)
-            RenderedSpeech(
-                audioRef = file.absolutePath,
-                frameCount = wav.frameCount,
-                sampleRateHz = wav.sampleRateHz,
-                channelCount = wav.channelCount,
-            )
-        }.getOrNull()
     }
 
     /** Earlier renders of the same key, which nothing will ask for again now the inputs have changed. */
@@ -262,6 +242,14 @@ class TtsSpeechSynth private constructor(
                     // so it is Baton's alone and VoiceView keeps the rate it has.
                     val rateStatus = engine.setSpeechRate(speechRate)
                     log("engine selected $packageName locale=${locale.toLanguageTag()} speechRate=$speechRate status=$rateStatus")
+                    // For the next launch's warm start. If it differs from what the last
+                    // bind wrote, this launch has already served renders in the old voice:
+                    // the warm start looked them up before this bind finished.
+                    val identity = RenderCache.Identity(packageName, locale)
+                    RenderCache.remembered(outputDir)?.takeIf { it != identity }?.let { was ->
+                        log("engine changed since the cache was written was=$was now=$identity; the next start re-renders")
+                    }
+                    RenderCache.remember(outputDir, identity)
                     return TtsSpeechSynth(engine, packageName, outputDir, locale, probes, speechRate, log)
                 } catch (t: Throwable) {
                     probes += EngineProbe(packageName, TextToSpeech.ERROR, 0, 0, t.toString())

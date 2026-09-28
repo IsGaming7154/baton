@@ -3,6 +3,8 @@ package dev.baton.speech
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import java.io.File
+import java.nio.file.Files
 import java.util.Locale
 
 /**
@@ -67,5 +69,42 @@ class RenderCacheTest : FunSpec({
         RenderCache.isStaleRender("disclosure-00000000.wav", "d7-0", "d7-0-abcdef12.wav") shouldBe false
         RenderCache.isStaleRender("d7-0.wav", "d7-0", "d7-0-abcdef12.wav") shouldBe false
         RenderCache.isStaleRender("d7-0-notahash.wav", "d7-0", "d7-0-abcdef12.wav") shouldBe false
+    }
+
+    // A warm start finds its files by the identity remembered from the last bind, so
+    // the identity has to come back able to name exactly the files it named before.
+    test("a remembered voice finds the same files, variant and all") {
+        val dir = Files.createTempDirectory("baton-identity").toFile().apply { deleteOnExit() }
+        val ivona = Locale("en", "IN", "kajal")
+        RenderCache.remember(dir, RenderCache.Identity(engine, ivona))
+
+        val back = RenderCache.remembered(dir)!!
+
+        back.engineId shouldBe engine
+        RenderCache.fingerprint(back.engineId, back.locale, 1.0f, "Sparks glow.") shouldBe
+            RenderCache.fingerprint(engine, ivona, 1.0f, "Sparks glow.")
+    }
+
+    test("an engine that reported no locale is remembered as none") {
+        val dir = Files.createTempDirectory("baton-identity").toFile().apply { deleteOnExit() }
+        RenderCache.remember(dir, RenderCache.Identity(engine, null))
+
+        RenderCache.remembered(dir) shouldBe RenderCache.Identity(engine, null)
+    }
+
+    test("with nothing remembered there is no warm start to attempt") {
+        val dir = Files.createTempDirectory("baton-identity").toFile().apply { deleteOnExit() }
+        RenderCache.remembered(dir) shouldBe null
+        File(dir, "engine").writeText("")
+        RenderCache.remembered(dir) shouldBe null
+    }
+
+    test("only a readable render comes back from the cache") {
+        val dir = Files.createTempDirectory("baton-read").toFile().apply { deleteOnExit() }
+        RenderCache.read(File(dir, "missing.wav")) shouldBe null
+        RenderCache.read(File(dir, "empty.wav").apply { writeBytes(ByteArray(0)) }) shouldBe null
+        RenderCache.read(File(dir, "garbage.wav").apply { writeText("not a wave") }) shouldBe null
+
+        RenderCache.read(wav(sampleRateHz = 24_000, channels = 1, frames = 480))!!.frameCount shouldBe 480L
     }
 })
