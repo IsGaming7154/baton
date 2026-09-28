@@ -24,7 +24,7 @@ This is a hackathon project. The honest scope:
 
 **Built**
 
-- `:director` — the arbitration state machine. Complete: two priority classes, preemption, the fit-or-drop admission rule, guard interval, seek rebaselining, pause-versus-stall handling, floor timeouts, adaptive duck depth, the gap between voices. 115 tests, including property tests over 1,300 randomised timelines.
+- `:director` — the arbitration state machine. Complete: two priority classes, preemption, the fit-or-drop admission rule, guard interval, seek rebaselining, pause-versus-stall handling, floor timeouts, adaptive duck depth, the gap between voices. 124 tests, including property tests over 1,300 randomised timelines.
 - `:player` — ExoPlayer adapter. Plays the clip, reports position and playback state, ducks the content, and meters the content's loudness live in the render chain.
 - `:speech` — text-to-speech engine selection, rendering to WAV, the intelligibility chain, loudness normalisation, and `AudioTrack` playback with observed (not timed) completion.
 - `:loudness` — ITU-R BS.1770-4 in full: K-weighting, gated integrated LUFS, a sliding short-term meter, a 4× polyphase true-peak meter.
@@ -179,7 +179,7 @@ Left unbound on purpose:
 
 Seven modules. Four of them — `:ports`, `:director`, `:loudness` and `:pipeline` — have no Android on their classpath at all.
 
-**`:director` is pure JVM.** No Android dependency, no framework dependency, no production dependency beyond the Kotlin standard library and one serialization library. It exposes `advance(nowMs, inputs) → Directive` and owns the entire arbitration policy. This is what makes the product's central claim provable: 115 tests, including a property test over randomised timelines, run on any machine with no device attached. The one dependency it does carry is `kotlinx-serialization`, because the `DescriptionTrack` codec has to live beside the model it encodes and neither `:app` nor `:pipeline` may depend on the other.
+**`:director` is pure JVM.** No Android dependency, no framework dependency, no production dependency beyond the Kotlin standard library and one serialization library. It exposes `advance(nowMs, inputs) → Directive` and owns the entire arbitration policy. This is what makes the product's central claim provable: 124 tests, including a property test over randomised timelines, run on any machine with no device attached. The one dependency it does carry is `kotlinx-serialization`, because the `DescriptionTrack` codec has to live beside the model it encodes and neither `:app` nor `:pipeline` may depend on the other.
 
 **`:ports` is interfaces and nothing else.** `PlaybackClock`, `ContentGain`, `ProgrammeLoudness`, `Speaker`, `SpeechSynth`. It exists so that neither side can reach through the seam: the director never learns that gain is a Media3 `AudioProcessor`, and the player never learns what a cue is. It is the reason the arbitration policy can be driven by a fake speaker in a unit test and by an `AudioTrack` on the device without either knowing the difference.
 
