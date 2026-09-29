@@ -2,7 +2,7 @@
 
 A running record of where the platform, the SDKs, the documentation, or the tooling got in the way while building Baton for Fire TV.
 
-Kept from the first commit rather than reconstructed at the end. Each entry records what was attempted, what happened, and what the workaround was.
+Kept from the first commit rather than reconstructed at the end. Each entry records the task attempted, the steps taken, what was expected against what actually happened, its severity, the workaround used, and a suggestion — the shape the hackathon's Official Rules ask for.
 
 Environment: Windows 11, Fire TV Stick HD (Fire OS 7 / Android 9 / API 28), targeting the Amazon Developer Hackathon Fire TV track.
 
@@ -59,13 +59,19 @@ adb shell am start -S -n dev.baton.tv/.MainActivity     --ez meter true --ez sil
 **Severity:** high — this is the project's thesis
 **Area:** Fire OS accessibility platform
 
-**What was attempted.** Establish which component decides who speaks when audio description, spoken subtitles, and the VoiceView screen reader are all active over content that has its own dialogue.
+**Task attempted.** Establish which component decides who speaks when audio description, spoken subtitles, and the VoiceView screen reader are all active over content that has its own dialogue.
 
-**What happened.** Nothing decides. There is no arbitration layer and no API through which one service can learn that another is speaking. All of them speak simultaneously. For a blind viewer watching foreign-language content — the case where all three services are genuinely needed at once — the result is three overlapping voices plus the original dialogue.
+**Steps taken.**
+1. Looked for an arbitration layer, or any API through which one speaking service can learn that another is speaking.
+2. Read Amazon's documented guidance for audio description and VoiceView used together.
+
+**Expected result.** Something on the platform decides which voice speaks, or at least lets each service see the others, so they take turns.
+
+**Actual result.** Nothing decides. There is no arbitration layer and no API through which one service can learn that another is speaking. All of them speak simultaneously. For a blind viewer watching foreign-language content — the case where all three services are genuinely needed at once — the result is three overlapping voices plus the original dialogue.
 
 **Workaround.** Amazon's own documented advice is to disable VoiceView. That restores intelligibility at the cost of the user's ability to operate the television. There is no workaround that preserves both.
 
-**Feature request.** Fire OS should expose an **acoustic priority API**: a system-level service through which any component that intends to speak declares an utterance with a priority class, and receives back either a grant or a deferral. Minimum viable surface:
+**Suggestion (feature request).** Fire OS should expose an **acoustic priority API**: a system-level service through which any component that intends to speak declares an utterance with a priority class, and receives back either a grant or a deferral. Minimum viable surface:
 
 - Register an utterance with a class (`user_initiated`, `time_critical`, `ambient`) and an expected duration
 - Receive a callback when the floor is granted, and when it is revoked by a higher-priority claim
@@ -83,9 +89,16 @@ Baton implements this arbitration inside a single application as a reference for
 **Severity:** high
 **Area:** Fire TV input APIs
 
-**What was attempted.** Add a spoken "ask about what is on screen" interaction, so a blind user could ask a question without navigating a menu.
+**Task attempted.** Add a spoken "ask about what is on screen" interaction, so a blind user could ask a question without navigating a menu.
 
-**What happened.** Three separate dead ends, none of them documented together in one place:
+**Steps taken.**
+1. Tried to receive the Alexa Voice Remote's microphone button as an input event.
+2. Tried the platform `SpeechRecognizer` API.
+3. Tried `AudioRecord` with `RECORD_AUDIO` granted.
+
+**Expected result.** At least one route delivers the user's speech to the foreground app, or fails with a clear error.
+
+**Actual result.** Three separate dead ends, none of them documented together in one place:
 
 - The microphone button on the Alexa Voice Remote routes directly to Alexa's cloud service. It is not delivered to the foreground application as an input event.
 - Fire OS ships no Google Play Services, so the platform `SpeechRecognizer` API is unavailable. Code written against the standard Android speech APIs compiles and then fails at runtime.
@@ -93,7 +106,7 @@ Baton implements this arbitration inside a single application as a reference for
 
 **Workaround.** Abandon voice input entirely and bind the interaction to a remote button. This turned out better for the use case — no wake word, no recognition latency, and it works with the television screen off — but arriving there took three failed approaches.
 
-**Documentation gap.** The voice-enablement documentation describes what an app *can* do with Alexa integration. It does not state plainly that direct microphone capture is unavailable to third-party apps. A single sentence saying so, on the audio input page, would have saved the entire investigation.
+**Suggestion (documentation gap).** The voice-enablement documentation describes what an app *can* do with Alexa integration. It does not state plainly that direct microphone capture is unavailable to third-party apps. A single sentence saying so, on the audio input page, would have saved the entire investigation.
 
 ---
 
@@ -102,11 +115,20 @@ Baton implements this arbitration inside a single application as a reference for
 **Severity:** medium
 **Area:** Fire OS accessibility settings
 
-**What was observed.** A recurring user report: once audio description is enabled, it stays enabled for all content indefinitely, including content where the user never requested it. The support-recommended remedy is a factory reset.
+**Task attempted.** None by Baton. This is a recurring user report, and the log records no attempt to reproduce it on our device.
+
+**Steps taken.**
+None; not reproduced.
+
+**Expected result.** Enabling audio description affects only the content it was enabled for, and can be switched off again from settings.
+
+**Actual result.** A recurring user report: once audio description is enabled, it stays enabled for all content indefinitely, including content where the user never requested it. The support-recommended remedy is a factory reset.
 
 **Why it matters.** The cost of enabling an accessibility feature should never be a factory reset. This defect teaches users not to try accessibility features at all, which is the opposite of the intent.
 
-**How Baton avoids it.** Description enablement is stored per title, with the global default off. Enabling description on one title does not enable it anywhere else, and a title's description can be muted without disabling the feature globally.
+**Workaround (how Baton avoids it).** Description enablement is stored per title, with the global default off. Enabling description on one title does not enable it anywhere else, and a title's description can be muted without disabling the feature globally.
+
+**Suggestion.** Store audio description enablement per title, or at least make it reversible from settings, so that trying an accessibility feature never costs a factory reset.
 
 ---
 
@@ -115,11 +137,20 @@ Baton implements this arbitration inside a single application as a reference for
 **Severity:** low, but costs time
 **Area:** documentation and discovery
 
-**What was attempted.** Fetch `react-native-multi-tv-app-sample`, referenced from the hackathon resources page.
+**Task attempted.** Fetch `react-native-multi-tv-app-sample`, referenced from the hackathon resources page.
 
-**What happened.** `amzn/react-native-multi-tv-app-sample` returns "repository not found." The samples live under `AmazonAppDev`. Amazon publishes under several GitHub organisations — `amzn`, `AmazonAppDev`, `amazon-archives` — and the resources page links to repositories without making the owning organisation obvious at a glance.
+**Steps taken.**
+1. Built the repository path from the sample's name under `amzn`.
+2. Fetched it and got "repository not found".
+3. Searched for the repository name and found it under `AmazonAppDev`.
+
+**Expected result.** The sample at the organisation the resources page implies.
+
+**Actual result.** `amzn/react-native-multi-tv-app-sample` returns "repository not found." The samples live under `AmazonAppDev`. Amazon publishes under several GitHub organisations — `amzn`, `AmazonAppDev`, `amazon-archives` — and the resources page links to repositories without making the owning organisation obvious at a glance.
 
 **Workaround.** Search for the repository name rather than trusting a constructed path.
+
+**Suggestion.** Name the owning organisation (`AmazonAppDev`) beside each linked repository on the resources page.
 
 ---
 
@@ -128,9 +159,20 @@ Baton implements this arbitration inside a single application as a reference for
 **Severity:** low — this is an opportunity, not a defect
 **Area:** developer tooling
 
-**What was observed.** `AmazonAppDev/devices-agent-skills` currently contains two skills: React Native TV UI best practices, and Vega multi-TV migration. Nothing covers Fire TV accessibility, Fire OS platform constraints, or building for older API levels on memory-constrained devices.
+**Task attempted.** Look for an existing Agent Skill covering Fire TV accessibility or Fire OS platform limits.
+
+**Steps taken.**
+Read the skills in `AmazonAppDev/devices-agent-skills` and its contributing guide.
+
+**Expected result.** Guidance on Fire TV accessibility or Fire OS platform constraints.
+
+**Actual result.** `AmazonAppDev/devices-agent-skills` currently contains two skills: React Native TV UI best practices, and Vega multi-TV migration. Nothing covers Fire TV accessibility, Fire OS platform constraints, or building for older API levels on memory-constrained devices.
 
 For a hackathon that explicitly rewards open-source contribution, this is the most obviously useful place to contribute, and the contributing guide is already open.
+
+**Workaround.** None needed; this is an opportunity, not a defect. Baton's own findings are to be contributed as a skill (issue #15).
+
+**Suggestion.** Add skills for Fire TV accessibility and Fire OS platform constraints to the repository.
 
 ---
 
@@ -139,9 +181,15 @@ For a hackathon that explicitly rewards open-source contribution, this is the mo
 **Severity:** low
 **Area:** hackathon tooling
 
-**What was attempted.** Read the hackathon rules and resources pages programmatically.
+**Task attempted.** Read the hackathon rules and resources pages programmatically.
 
-**What happened.** At the time this was first recorded, every path returned `HTTP 403 Forbidden` to the plain HTTP client used then, regardless of path. A re-test on 2026-09-11 contradicts the idea that Devpost blocks non-browser clients as a rule. Fetching `https://amazonappdev2026.devpost.com/rules` with curl 8.18.0:
+**Steps taken.**
+1. Fetched the rules and resources pages with a plain HTTP client: 403 on every path.
+2. Re-tested on 2026-09-11 with curl 8.18.0 across four User-Agent strings (below).
+
+**Expected result.** A public page returns the same content to a script as to a browser.
+
+**Actual result.** At the time this was first recorded, every path returned `HTTP 403 Forbidden` to the plain HTTP client used then, regardless of path. A re-test on 2026-09-11 contradicts the idea that Devpost blocks non-browser clients as a rule. Fetching `https://amazonappdev2026.devpost.com/rules` with curl 8.18.0:
 
 - curl's default User-Agent: **200**
 - `User-Agent: Python-urllib/3.13`: **200**
@@ -153,6 +201,8 @@ The rule behind the block isn't known. The only reproducible trigger seen is a b
 
 **Workaround.** Send a complete User-Agent string or none, or read the page in a real browser.
 
+**Suggestion.** Nothing for Amazon. For Devpost: when the filter refuses a request, say that the User-Agent is the reason.
+
 ---
 
 ## 7. Windows toolchain: nothing needed for Fire TV development is present by default
@@ -160,9 +210,16 @@ The rule behind the block isn't known. The only reproducible trigger seen is a b
 **Severity:** medium
 **Area:** getting started
 
-**What was attempted.** Build an Android application for Fire TV on a clean Windows 11 machine.
+**Task attempted.** Build an Android application for Fire TV on a clean Windows 11 machine.
 
-**What happened.** A sequence of small obstacles, each individually trivial and collectively an afternoon:
+**Steps taken.**
+1. Ran a Gradle build with the machine's defaults.
+2. Looked for the Android SDK and `adb`.
+3. Downloaded the Android command-line tools from URLs found in documentation, blog posts and tutorials.
+
+**Expected result.** Errors that point at what is missing, and a documented lean path from a clean machine to `adb` and a build.
+
+**Actual result.** A sequence of small obstacles, each individually trivial and collectively an afternoon:
 
 - A JDK 21 installation was present and `JAVA_HOME` pointed at it, but `java` on `PATH` resolved to **Java 8**. The Android Gradle Plugin requires 17 or newer, and the resulting failure message does not point at the `PATH`/`JAVA_HOME` mismatch.
 - No Android SDK, no `adb`, no `gradle`. `adb` is what you need to put anything on a Fire TV Stick at all, and it arrives only as part of the SDK's platform-tools.
@@ -170,9 +227,7 @@ The rule behind the block isn't known. The only reproducible trigger seen is a b
 
 **Workaround.** Install command-line tools only rather than the full Android Studio — roughly 150 MB against roughly 1 GB, no GUI, and scriptable. Scrape the current build number rather than hardcoding one.
 
-**Documentation gap.** Amazon's Fire TV getting-started material assumes Android Studio is already installed and configured. For a developer arriving from outside the Android ecosystem — which a hackathon will attract — there is no lean, scriptable path documented.
-
----
+**Suggestion (documentation gap).** Amazon's Fire TV getting-started material assumes Android Studio is already installed and configured. For a developer arriving from outside the Android ecosystem — which a hackathon will attract — there is no lean, scriptable path documented.
 
 ---
 
@@ -181,19 +236,27 @@ The rule behind the block isn't known. The only reproducible trigger seen is a b
 **Severity:** medium
 **Area:** Android Gradle Plugin / dependency resolution
 
-**What was attempted.** Add `androidx.tv:tv-foundation:1.0.0` and `androidx.tv:tv-material:1.0.0` to a project pinned at `compileSdk = 34` (matching the Fire TV Stick HD's real ceiling of interest, API 28) — the dependency pair that Compose-for-TV guides and starter templates hand you.
+**Task attempted.** Add `androidx.tv:tv-foundation:1.0.0` and `androidx.tv:tv-material:1.0.0` to a project pinned at `compileSdk = 34` (matching the Fire TV Stick HD's real ceiling of interest, API 28) — the dependency pair that Compose-for-TV guides and starter templates hand you.
 
-**What happened.** The build failed immediately with roughly 30 separate `Dependency ... requires libraries and applications that depend on it to compile against ... API 35` / `... AGP 8.6.0 or higher` errors — one per transitive artifact pulled in by tv-foundation, not one summary error. The actual constraint is a single fact (tv-foundation 1.0.0's AAR metadata hard-requires `minCompileSdk=35` and AGP ≥ 8.6.0) baked into the artifact itself; it has nothing to do with anything the developer controls, but the failure presents as a wall of near-identical messages that reads like a cascading dependency conflict rather than one clear statement.
+**Steps taken.**
+1. Added the `tv-foundation` + `tv-material` pair at `compileSdk = 34`.
+2. Raised compileSdk to 35 and AGP to clear the metadata errors.
+3. Excluded the transitive groups and added `-Xskip-metadata-version-check`.
+4. Checked what the code actually imports, and deleted `tv-foundation`.
+
+**Expected result.** The dependency pair from the guides builds on the project's pinned toolchain, or fails with one clear error.
+
+**Actual result.** The build failed immediately with roughly 30 separate `Dependency ... requires libraries and applications that depend on it to compile against ... API 35` / `... AGP 8.6.0 or higher` errors — one per transitive artifact pulled in by tv-foundation, not one summary error. The actual constraint is a single fact (tv-foundation 1.0.0's AAR metadata hard-requires `minCompileSdk=35` and AGP ≥ 8.6.0) baked into the artifact itself; it has nothing to do with anything the developer controls, but the failure presents as a wall of near-identical messages that reads like a cascading dependency conflict rather than one clear statement.
 
 Separately, once compileSdk/AGP were raised to satisfy that gate, resolving the tv artifacts' transitive graph without pinning pulled in `kotlin-stdlib:2.1.20` (a hard dependency constraint in tv-foundation's own POM) and `compose-ui-tooling:1.10.x`, both incompatible with this project's Kotlin 1.9.24 compiler — `compileDebugKotlin` failed with "Module was compiled with an incompatible version of Kotlin. The binary version of its metadata is 2.1.0, expected version is 1.9.0." The tv-foundation-1.0.0 AAR was itself built with a Kotlin 2.1 compiler, and Kotlin's metadata format is not forward-readable by an older compiler.
 
 **The workaround we reached for first, and why it was wrong.** compileSdk and minSdk are independent, and the error text does say so — raising `compileSdk` to 35 costs nothing at runtime and does not raise the device floor, so `minSdk` stayed 28. For the transitive graph we then excluded `androidx.compose.*`, `androidx.activity`, `androidx.lifecycle`, `androidx.savedstate`, `androidx.core` and `org.jetbrains.kotlin` from both `androidx.tv` dependencies, re-declared them against compose-bom 2024.06.00, and added `-Xskip-metadata-version-check` to `freeCompilerArgs`. That built. It was also the wrong answer: `-Xskip-metadata-version-check` disables a real correctness gate for *every* Kotlin compilation in the module, and this project is about to grow several more.
 
-**The actual fix.** `tv-foundation` was never imported. The single `androidx.tv` symbol anywhere in the codebase was `androidx.tv.material3.Surface`, which comes from `tv-material`. Deleting the `tv-foundation` dependency removed the AAR-metadata gate, the Kotlin metadata conflict, the `org.jetbrains.kotlin` exclusion and the compiler flag in one line. A clean build then succeeded with no override of any correctness check.
+**Workaround (the actual fix).** `tv-foundation` was never imported. The single `androidx.tv` symbol anywhere in the codebase was `androidx.tv.material3.Surface`, which comes from `tv-material`. Deleting the `tv-foundation` dependency removed the AAR-metadata gate, the Kotlin metadata conflict, the `org.jetbrains.kotlin` exclusion and the compiler flag in one line. A clean build then succeeded with no override of any correctness check.
 
 This turned out to be the documented path rather than a lucky escape. `tv-foundation` 1.0.0 (January 2025) **removed** `TvLazyRow`, `TvLazyColumn`, `TvLazyHorizontalGrid` and `TvLazyVerticalGrid` outright — that functionality was absorbed into `compose-foundation` 1.7.0, which gained the focus-positioning behaviour TV apps needed. Google's own migration guidance is, verbatim, to remove the dependency and swap `TvLazy*` for `Lazy*`. So the artifact that forced compileSdk 35, AGP 8.6.0+, a nine-group exclusion block and a project-wide correctness override is a near-empty shell nobody is supposed to depend on any more.
 
-**Documentation gap.** Two distinct ones.
+**Suggestion (documentation gap).** Two distinct ones.
 
 First, nothing in the AAR-metadata error text or the `androidx.tv` release notes mentions the Kotlin compiler version constraint. It only surfaces after compileSdk and AGP are already fixed, so you see two unrelated-looking failures in sequence for one root cause.
 
@@ -208,9 +271,16 @@ Second, and more costly: `tv-foundation` is still published, still resolves, and
 **Severity:** high
 **Area:** Fire OS text-to-speech / device provisioning
 
-**What was attempted.** Speak a line of text from a third-party application on a Fire TV Stick (AFTSSS, Fire OS 7.7.1.5, Android 9 / API 28, 900 MB RAM), using the standard Android `TextToSpeech` API.
+**Task attempted.** Speak a line of text from a third-party application on a Fire TV Stick (AFTSSS, Fire OS 7.7.1.5, Android 9 / API 28, 900 MB RAM), using the standard Android `TextToSpeech` API.
 
-**What happened.** Two engines are installed and enabled, both declaring `android.intent.action.TTS_SERVICE`. IVONA is the platform default, and on a device where VoiceView has never been switched on it is a shell with no voice data:
+**Steps taken.**
+1. Constructed `TextToSpeech` with the two-argument constructor, which takes the default engine.
+2. Called `synthesizeToFile` on each installed engine and measured the audio produced.
+3. Repeated with VoiceView enabled, and again after disabling it.
+
+**Expected result.** Audible speech from the default engine, or an error from `onInit` or `synthesizeToFile` if it cannot speak.
+
+**Actual result.** Two engines are installed and enabled, both declaring `android.intent.action.TTS_SERVICE`. IVONA is the platform default, and on a device where VoiceView has never been switched on it is a shell with no voice data:
 
 | state | engine | `onInit` | voices | `synthesizeToFile` | audio produced |
 |---|---|---|---|---|---|
@@ -233,7 +303,7 @@ Three distinct problems are visible in that table.
 
 There is a further turn, and it lands on this project's thesis. The path that provisions the good voice is enabling VoiceView. But Amazon's own published remedy for simultaneous audio description and screen-reader speech — the defect described in entry 1 of this log — is to *disable* VoiceView. A user who follows Amazon's accessibility guidance to the letter on a fresh device therefore never triggers provisioning, and every application on that device, including the accessibility applications that need it most, is left with the worse voice and no indication that a better one exists.
 
-**Feature request.** Three, in order of value:
+**Suggestion (feature request).** Three, in order of value:
 
 1. **Provision a default IVONA voice at first boot**, independent of whether the screen reader is ever enabled. The voice data is small, the download already exists, and the current trigger couples an unrelated user choice to the speech quality of every application on the device.
 2. **Fail loudly.** An engine with zero installed voices should return an error from `onInit` rather than `SUCCESS`, and `synthesizeToFile` should not return `SUCCESS` for an utterance it cannot render. Reporting success and then emitting silence through a deprecated callback is the most expensive possible way to communicate a missing asset.
@@ -248,9 +318,14 @@ There is a further turn, and it lands on this project's thesis. The path that pr
 **Severity:** high — it forces every well-behaved application to reimplement a broadcast standard
 **Area:** Fire OS media framework (API 28)
 
-**What was attempted.** Duck the content by a defensible amount. The dip that makes description intelligible is not a fixed number of decibels; it is whatever holds the narration a constant loudness difference above the bed, so it depends on how loud the bed currently is. That requires measuring the programme's loudness — ITU-R BS.1770 — while it plays.
+**Task attempted.** Duck the content by a defensible amount. The dip that makes description intelligible is not a fixed number of decibels; it is whatever holds the narration a constant loudness difference above the bed, so it depends on how loud the bed currently is. That requires measuring the programme's loudness — ITU-R BS.1770 — while it plays.
 
-**What happened.** There is no route to that measurement on API 28. Every candidate fails for a different reason:
+**Steps taken.**
+Checked each API 28 candidate in turn: `LoudnessEnhancer`; `MediaFormat`'s DRC keys, diffed across tagged AOSP releases; `LoudnessCodecController`; `Visualizer`.
+
+**Expected result.** Some platform route to the loudness of the content the app is playing, on API 28.
+
+**Actual result.** There is no route to that measurement on API 28. Every candidate fails for a different reason:
 
 - **`LoudnessEnhancer`** (API 19) is an effect, not a meter. Its entire public surface is `setTargetGain()` / `getTargetGain()`. It changes audio; it never reports it.
 - **`MediaFormat.KEY_AAC_DRC_OUTPUT_LOUDNESS`** is the readback key, and it **arrives at API 30**. Confirmed by diffing the field list across tagged AOSP releases of `frameworks/base/media/java/android/media/MediaFormat.java`: absent in `android-9.0.0_r36` (API 28) and `android-10.0.0_r41` (API 29), present in `android-11.0.0_r1` (API 30). At API 28 only the *input* DRC keys exist — `KEY_AAC_DRC_TARGET_REFERENCE_LEVEL`, `_BOOST_FACTOR`, `_ATTENUATION_FACTOR`, `_HEAVY_COMPRESSION`. You may tell the decoder how to apply DRC. You may not read back what it measured. Even at API 30 it is AAC-only, quantised to 0.25 LKFS steps, and returns `-1` when the bitstream carries no MPEG-D DRC metadata — the common case for a film master.
@@ -263,7 +338,7 @@ There is a further turn, and it lands on this project's thesis. The path that pr
 
 Two costs that are worth naming, because they are the reason this should not be application work. The standard's coefficient table is specified at 48 kHz and nothing on this device runs at 48 kHz — IVONA renders at 24 kHz, Pico at 16 kHz — so the filters must be re-derived from the analogue prototype with a `tan()` prewarp per sample rate. And a mono file measured as stereo reads 3 dB hot, which would have put every rendered utterance at the wrong end of Amazon's own ±2 LU window while every stereo test still passed.
 
-**Feature request.** A **programme loudness meter** on the media session: BS.1770 short-term and integrated loudness for the content the application is currently playing, readable without `RECORD_AUDIO`, and available on the DRM and passthrough paths where the platform is doing the decoding anyway. The platform already has the decoded samples in a place the application cannot reach; it is uniquely positioned to measure them. Note that this gap is **not** closed by Amazon's next-generation audio library — see entry 12 — which fixes the control side of this problem and leaves the measurement side untouched.
+**Suggestion (feature request).** A **programme loudness meter** on the media session: BS.1770 short-term and integrated loudness for the content the application is currently playing, readable without `RECORD_AUDIO`, and available on the DRM and passthrough paths where the platform is doing the decoding anyway. The platform already has the decoded samples in a place the application cannot reach; it is uniquely positioned to measure them. Note that this gap is **not** closed by Amazon's next-generation audio library — see entry 12 — which fixes the control side of this problem and leaves the measurement side untouched.
 
 ---
 
@@ -272,9 +347,16 @@ Two costs that are worth naming, because they are the reason this should not be 
 **Severity:** medium — the number already exists, computed by the people best placed to compute it
 **Area:** AndroidX Media3 / ExoPlayer extractor
 
-**What was attempted.** Before writing a loudness meter from scratch (entry 10), establish whether the content already carries its own loudness. AC-3 and E-AC-3 both do: `dialnorm` is a mandatory five-bit field in every syncframe header, set by the mastering engineer to describe the programme's dialogue level.
+**Task attempted.** Before writing a loudness meter from scratch (entry 10), establish whether the content already carries its own loudness. AC-3 and E-AC-3 both do: `dialnorm` is a mandatory five-bit field in every syncframe header, set by the mastering engineer to describe the programme's dialogue level.
 
-**What happened.** The value is in the bitstream, the parser reads right past it, and nothing downstream ever sees it. In `androidx/media`, `libraries/extractor/src/main/java/androidx/media3/extractor/Ac3Util.java`, inside `parseAc3SyncframeInfo` (line 280):
+**Steps taken.**
+1. Checked whether AC-3/E-AC-3 content's `dialnorm` reaches the app.
+2. Read Media3's `Ac3Util.parseAc3SyncframeInfo`.
+3. Looked for a `MediaFormat` key or Dolby vendor key carrying it.
+
+**Expected result.** The loudness already in the bitstream, exposed on the parsed frame info or on `Format`.
+
+**Actual result.** The value is in the bitstream, the parser reads right past it, and nothing downstream ever sees it. In `androidx/media`, `libraries/extractor/src/main/java/androidx/media3/extractor/Ac3Util.java`, inside `parseAc3SyncframeInfo` (line 280):
 
 ```java
 data.skipBits(5 + 5);   // bsid, dialnorm      (line 331)
@@ -291,7 +373,7 @@ Nor is there anywhere else to get it. There is no `KEY_AC3_*` or `KEY_EAC3_*` in
 
 **Workaround.** None. Measure it yourself, as in entry 10. This is the more frustrating of the two gaps: entry 10 is "the platform will not measure this for you", whereas this is "a mastering engineer already measured it to a published standard and encoded it into the file, and the library reads past it".
 
-**Feature request.** Surface `dialnorm` on `SyncFrameInfo`, and the equivalent loudness metadata for other codecs on `Format`. It costs a field and a few bits of parsing that already happen. Two open issues on `androidx/media` — [#1806](https://github.com/androidx/media/issues/1806) and [#2497](https://github.com/androidx/media/issues/2497) — ask for adjacent loudness support and remain unresolved, so this is not a niche request.
+**Suggestion (feature request).** Surface `dialnorm` on `SyncFrameInfo`, and the equivalent loudness metadata for other codecs on `Format`. It costs a field and a few bits of parsing that already happen. Two open issues on `androidx/media` — [#1806](https://github.com/androidx/media/issues/1806) and [#2497](https://github.com/androidx/media/issues/2497) — ask for adjacent loudness support and remain unresolved, so this is not a niche request.
 
 *Verified against the `androidx/media` release branch. Baton pins Media3 1.4.1; the skip is longstanding ExoPlayer code and is not believed to differ, but the exact 1.4.1 tag was not diffed.*
 
@@ -302,9 +384,15 @@ Nor is there anywhere else to get it. There is no `KEY_AC3_*` or `KEY_EAC3_*` in
 **Severity:** high — it puts a broadcast mandate out of reach of any Fire TV application
 **Area:** AudioFlinger / AudioMixer (API 28)
 
-**What was attempted.** Meet Netflix's Audio Description Style Guide, which mandates a ducking attack of **no less than 2 ms and no more than 15 ms**. Longer than 15 ms and the bed is still on its way down when the narrator's first consonant arrives, masking it — the exact failure this product exists to prevent.
+**Task attempted.** Meet Netflix's Audio Description Style Guide, which mandates a ducking attack of **no less than 2 ms and no more than 15 ms**. Longer than 15 ms and the bed is still on its way down when the narrator's first consonant arrives, masking it — the exact failure this product exists to prevent.
 
-**What happened.** The platform cannot deliver it, and the reason is structural rather than a matter of tuning.
+**Steps taken.**
+1. Traced `AudioTrack.setVolume` through AudioFlinger's mixer in the AOSP source.
+2. Read every output thread's mix period on the Stick with `dumpsys media.audio_flinger`.
+
+**Expected result.** A ducking attack of 15 ms or less.
+
+**Actual result.** The platform cannot deliver it, and the reason is structural rather than a matter of tuning.
 
 `AudioTrack.setVolume` does not reach the mixer when it is called. It packs the gain as a minifloat into the track's shared control block and returns; the only IPC is a `signal()`, and only for offloaded tracks (`frameworks/av`, `media/libaudioclient/AudioTrack.cpp:867-885`). AudioFlinger's mixer thread reads that block **once per mix buffer** in `prepareTracks_l` (`services/audioflinger/Threads.cpp:4414`, `:4561`) and hands the value to `AudioMixer` as `RAMP_VOLUME` (`Threads.cpp:4543`), which interpolates linearly from the previous gain to the new one across the whole of that buffer.
 
@@ -327,7 +415,7 @@ One honest caveat: `AudioOut_D` at 768 frames is *not* what the AOSP source abov
 
 **Workaround.** Command a 10 ms attack and accept that the platform's own ramp — 16 ms at best on this hardware — is what is actually heard. Baton splits attack from release for this — `attackMs = 10`, `releaseMs = 150` — chosen by direction of travel, so a duck that deepens mid-utterance attacks while one returning to unity releases. The release is bounded by the director's own 250 ms guard interval rather than by any platform number. There is one compensation worth recording: because `RAMP_VOLUME` smooths every write across a buffer, no single volume step can click, however large. The platform takes the fine control away and hands back a guarantee of smoothness in its place.
 
-**Feature request.** A ducking API with an explicit, application-supplied ramp duration.
+**Suggestion (feature request).** A ducking API with an explicit, application-supplied ramp duration.
 
 This one requires no speculation about what the API should look like, because **Amazon has already built it.** In `@amazon-devices/keplerscript-audio-lib@2.0.18` — the audio library for Vega OS, Amazon's next-generation device operating system — `dist/AudioPlaybackStream.d.ts:712`:
 
@@ -348,9 +436,16 @@ The request for Fire OS is simply that this reach API 28's installed base, which
 **Severity:** high — measured on the device: the voice sat 15.1 LU above the ducked bed where 12.5 was asked for
 **Area:** Fire OS audio framework (API 28) / loudness calibration
 
-**What was attempted.** Baton renders and measures its narration as mono at −27 LKFS (`SpeechClarity`, matching the −27 LKFS Amazon Prime Video and Netflix both specify for description narration), then computes how far to duck the programme bed from that measurement together with the programme's own BS.1770 loudness.
+**Task attempted.** Baton renders and measures its narration as mono at −27 LKFS (`SpeechClarity`, matching the −27 LKFS Amazon Prime Video and Netflix both specify for description narration), then computes how far to duck the programme bed from that measurement together with the programme's own BS.1770 loudness.
 
-**What happened.** The measurement is taken as mono; what plays is not. On Android 9, `AudioMixer::Track::prepareForDownmix` explicitly declines to remix a mono track onto a stereo mixer — the source comment reads "MONO_HACK Only remix (upmix or downmix) if the track and mixer/device channel masks are not the same and not handled internally, as mono -> stereo currently is" — and the mono sample is instead copied to both output channels. The per-frame mixing code does the same at two different layers: the resampler's `CHANNELS == 1` branch computes one sample `l` and writes it to both `out[0]` and `out[1]`, and the mixer's `MIXTYPE_MONOEXPAND` case multiplies that same input sample by each output channel's own volume and writes a copy to every channel. Neither applies any reduction for the duplication — a search of every file under `media/libaudioprocessing` for "pan" returns nothing; there is no pan-law logic anywhere in this mixer.
+**Steps taken.**
+1. Traced mono-to-stereo handling through the Android 9 mixer source.
+2. On the Stick, played the same pink noise as a mono file and as a two-channel file and read both through `OutputMeter`.
+3. With the offset at zero, measured the voice against the ducked bed.
+
+**Expected result.** Narration reaches the output at the loudness it was measured at, so the duck rule's 12.5 LU separation holds.
+
+**Actual result.** The measurement is taken as mono; what plays is not. On Android 9, `AudioMixer::Track::prepareForDownmix` explicitly declines to remix a mono track onto a stereo mixer — the source comment reads "MONO_HACK Only remix (upmix or downmix) if the track and mixer/device channel masks are not the same and not handled internally, as mono -> stereo currently is" — and the mono sample is instead copied to both output channels. The per-frame mixing code does the same at two different layers: the resampler's `CHANNELS == 1` branch computes one sample `l` and writes it to both `out[0]` and `out[1]`, and the mixer's `MIXTYPE_MONOEXPAND` case multiplies that same input sample by each output channel's own volume and writes a copy to every channel. Neither applies any reduction for the duplication — a search of every file under `media/libaudioprocessing` for "pan" returns nothing; there is no pan-law logic anywhere in this mixer.
 
 BS.1770 sums power across channels, so a signal duplicated identically to both channels of a stereo pair measures `10·log10(2) ≈ 3.01` LU hotter than the same signal measured as mono. A narration authored and measured at −27 LKFS therefore reaches the ear about 3 LU hotter than that figure, and a duck rule that computes its dip straight from the mono LKFS number puts the voice about 15.5 LU above the ducked bed instead of the intended 12.5 — every dip about 3 dB too deep.
 
@@ -366,7 +461,7 @@ BS.1770 sums power across channels, so a signal duplicated identically to both c
 
 **Workaround.** A configurable offset — `narrationMonoToStereoOffsetDb`, defaulting to `10·log10(2)` — added to the narration's measured level in the duck-depth rule, so the rule works from the voice as heard rather than as measured. It is a knob and not a literal because a device that does apply a pan law would need it at `0`. Shipped once the measurement above confirmed it.
 
-**Ask.** Documented channel-mapping and gain behaviour for mono tracks on Fire OS audio outputs, including HDMI: whether any Fire TV device applies a pan law the stock AOSP mixer does not, and whether that differs from what a Stick with no internal speaker does over HDMI passthrough.
+**Suggestion.** Documented channel-mapping and gain behaviour for mono tracks on Fire OS audio outputs, including HDMI: whether any Fire TV device applies a pan law the stock AOSP mixer does not, and whether that differs from what a Stick with no internal speaker does over HDMI passthrough.
 
 ---
 
@@ -375,9 +470,15 @@ BS.1770 sums power across channels, so a signal duplicated identically to both c
 **Severity:** medium — a diagnostic dead end that reads like working evidence
 **Area:** Fire OS audio APIs / diagnostics
 
-**What was attempted.** Confirm that switching narration playback from `MODE_STREAM` to `MODE_STATIC` (`RenderedAudioSpeaker.kt`) actually fixed the underrun pops that motivated the switch, by reading `AudioTrack.getUnderrunCount()` before and after.
+**Task attempted.** Confirm that switching narration playback from `MODE_STREAM` to `MODE_STATIC` (`RenderedAudioSpeaker.kt`) actually fixed the underrun pops that motivated the switch, by reading `AudioTrack.getUnderrunCount()` before and after.
 
-**What happened.** `underrunCount` read 0 on both the old streaming build and the new static one — which looked like confirmation, until the source explained why it can't be. `StaticAudioTrackClientProxy::getUnderrunCount()` is hard-coded to return `0` unconditionally. The server side matches it: `StaticAudioTrackServerProxy::tallyUnderrunFrames()` says outright, in its own comment, "we don't have a location to count underrun frames. The underrun frame counter only exists in `AudioTrackSharedStreaming`." A static track has no underrun counter anywhere in the shared-memory IPC path, so a 0 proves nothing about whether the mode switch changed anything — it would read 0 either way.
+**Steps taken.**
+1. Read `AudioTrack.getUnderrunCount()` on the old `MODE_STREAM` build and on the new `MODE_STATIC` build.
+2. Read the AOSP source behind the count.
+
+**Expected result.** A count that would change if the switch had changed the underruns.
+
+**Actual result.** `underrunCount` read 0 on both the old streaming build and the new static one — which looked like confirmation, until the source explained why it can't be. `StaticAudioTrackClientProxy::getUnderrunCount()` is hard-coded to return `0` unconditionally. The server side matches it: `StaticAudioTrackServerProxy::tallyUnderrunFrames()` says outright, in its own comment, "we don't have a location to count underrun frames. The underrun frame counter only exists in `AudioTrackSharedStreaming`." A static track has no underrun counter anywhere in the shared-memory IPC path, so a 0 proves nothing about whether the mode switch changed anything — it would read 0 either way.
 
 By contrast, a streaming track's count is real: `AudioTrackServerProxy::tallyUnderrunFrames()` increments a counter stored in `cblk->u.mStreaming.mUnderrunCount` whenever the mixer thread finds fewer frames ready than it wanted, and the mixer calls it from exactly that check on every mix pass.
 
@@ -385,7 +486,9 @@ By contrast, a streaming track's count is real: `AudioTrackServerProxy::tallyUnd
 
 **How Baton caught it.** Recorded in this repo's own measurement table, `README.md:277`: "`underrunCount=0` on both the old `MODE_STREAM` build and `MODE_STATIC` — so it is not evidence for the switch: a static track always reports 0."
 
-**Ask.** Document the always-0 behaviour on `AudioTrack.getUnderrunCount()`'s own reference page for `MODE_STATIC`, or give static tracks a real underrun signal instead of a dead API that returns a plausible-looking zero.
+**Workaround.** None on the platform side. The zero was withdrawn as evidence for the `MODE_STATIC` switch (see *How Baton caught it*); this entry records no other underrun signal used in its place.
+
+**Suggestion.** Document the always-0 behaviour on `AudioTrack.getUnderrunCount()`'s own reference page for `MODE_STATIC`, or give static tracks a real underrun signal instead of a dead API that returns a plausible-looking zero.
 
 ---
 
@@ -394,9 +497,15 @@ By contrast, a streaming track's count is real: `AudioTrackServerProxy::tallyUnd
 **Severity:** medium — blocks capturing the Stick's own audio cleanly; a camera pointed at the screen still satisfies the demo-video requirement itself
 **Area:** Fire OS / Android 9 capture tooling
 
-**What was attempted.** Produce the hackathon demo video with audio captured directly from the Fire TV Stick, so a reviewer hears exactly what a viewer hears — ducking, narration and all — rather than a re-recording.
+**Task attempted.** Produce the hackathon demo video with audio captured directly from the Fire TV Stick, so a reviewer hears exactly what a viewer hears — ducking, narration and all — rather than a re-recording.
 
-**What happened.** Every software capture path available on this device is closed:
+**Steps taken.**
+1. Checked `adb shell screenrecord` against its Android 9 source.
+2. Checked `scrcpy`'s audio forwarding against its documentation.
+
+**Expected result.** A software route that records the Stick's picture and sound together.
+
+**Actual result.** Every software capture path available on this device is closed:
 
 - Android 9's `adb shell screenrecord` captures video only. `cmds/screenrecord/screenrecord.cpp` declares exactly one MIME type constant, `kMimeTypeAvc = "video/avc"` (line 68), feeds it to a single `MediaCodec` encoder, and the muxer callback adds exactly one track from that encoder's output format (`muxer->addTrack(newFormat)`, line 482). The word "audio" does not appear anywhere in the file.
 - `scrcpy`'s audio forwarding needs Android 11 (API 30) or newer. Its own README states the feature outright — "audio forwarding (doc/audio.md) (Android 11+)" (`README.md:37`) — and `doc/audio.md:11` is more specific about this exact case: "For Android 10 or earlier, audio cannot be captured and is automatically disabled." The Fire TV Stick here runs Android 9.
@@ -407,7 +516,9 @@ By contrast, a streaming track's count is real: `AudioTrackServerProxy::tallyUnd
 
 **Sources.** LineageOS `android_frameworks_av`, branch `lineage-16.0`: `cmds/screenrecord/screenrecord.cpp:68` (the sole MIME constant) and `:482` (single-track muxer add), plus a full-file search for "audio" returning no matches. `Genymobile/scrcpy`, branch `master`: `README.md:37`, `doc/audio.md:11`. Note the screenrecord source is verified against LineageOS's mirror of `frameworks/av`, not a stock-AOSP checkout; `cmds/screenrecord` is not known to carry Lineage-specific patches, but that was not independently confirmed.
 
-**Ask.** A supported capture path for a Fire TV Stick's own audio and video together — even a debug-only one gated behind Developer Options, the way `screenrecord` itself already is.
+**Workaround.** Film the screen with a phone. Screen capture cannot stand in for it either: `screenrecord` leaves the film area blank, because the picture is on a hardware `SurfaceView` layer, and forcing it onto a `TextureView` records at 4.3 fps at 1080p, with no audio. The sound is then verified objectively from the footage and the run's own `adb logcat`.
+
+**Suggestion.** A supported capture path for a Fire TV Stick's own audio and video together — even a debug-only one gated behind Developer Options, the way `screenrecord` itself already is.
 
 ---
 
@@ -416,9 +527,16 @@ By contrast, a streaming track's count is real: `AudioTrackServerProxy::tallyUnd
 **Severity:** medium — a real bug, fixed, but only discoverable by decompiling the pinned dependency rather than reading its current source
 **Area:** AndroidX Media3 / ExoPlayer (pinned version 1.4.1)
 
-**What was attempted.** After `DuckingAudioProcessor` reported impossible `sinkLatencyMs` values (observed: −38000 / −66500 ms) following a seek, establish whether the `AudioProcessor` interface Media3 1.4.1 exposes gives a processor any way to learn the position playback resumed from when the platform calls `flush()`.
+**Task attempted.** After `DuckingAudioProcessor` reported impossible `sinkLatencyMs` values (observed: −38000 / −66500 ms) following a seek, establish whether the `AudioProcessor` interface Media3 1.4.1 exposes gives a processor any way to learn the position playback resumed from when the platform calls `flush()`.
 
-**What happened.** It does not, at this version. Decompiling the actual `AudioProcessor.class` this project depends on — `media3-common-1.4.1.aar`'s `classes.jar`, `androidx/media3/common/audio/AudioProcessor.class`, read with `javap` since no 1.4.1 sources jar exists anywhere in the Gradle cache — shows `flush()` as a bare no-argument method: `public abstract void flush();`. There is no `StreamMetadata` class file anywhere in that jar and no `flush(StreamMetadata)` overload on the interface at this version.
+**Steps taken.**
+1. Saw impossible `sinkLatencyMs` values after a seek.
+2. Decompiled the pinned 1.4.1 `AudioProcessor.class` with `javap`.
+3. Compared it against the current upstream source and release notes.
+
+**Expected result.** `flush()` tells the processor where playback resumed.
+
+**Actual result.** It does not, at this version. Decompiling the actual `AudioProcessor.class` this project depends on — `media3-common-1.4.1.aar`'s `classes.jar`, `androidx/media3/common/audio/AudioProcessor.class`, read with `javap` since no 1.4.1 sources jar exists anywhere in the Gradle cache — shows `flush()` as a bare no-argument method: `public abstract void flush();`. There is no `StreamMetadata` class file anywhere in that jar and no `flush(StreamMetadata)` overload on the interface at this version.
 
 A later version does carry it. The cached `androidx/media` release-branch checkout (currently at 1.11.0, 2026-08-05) has `flush(StreamMetadata)` as the primary method, the old no-arg `flush()` now `@Deprecated`, and `StreamMetadata.positionOffsetUs` documented as "up-to-date at the time of the `flush(StreamMetadata)` call." The release notes place that addition specifically in **1.11.0** (`RELEASENOTES.md:183-185`, tracking issue `androidx/media#418`) — seven minor versions after the 1.4.1 this project pins.
 
@@ -428,7 +546,7 @@ So on 1.4.1, `DuckingAudioProcessor` gets no platform-given signal that a seek h
 
 **Workaround (shipped).** `BatonPlayer` already listens for `Player.DISCONTINUITY_REASON_SEEK`; it now hands the landing position to `DuckingAudioProcessor.seekedTo()`, which `writtenPositionMs()` adds back once `onFlush()` resets the frame counter for the new segment. See `player/src/main/java/dev/baton/player/BatonPlayer.kt:69` (`if (reason == Player.DISCONTINUITY_REASON_SEEK) sampleLevelGain.seekedTo(newPosition.positionMs)`) and `player/src/main/java/dev/baton/player/DuckingAudioProcessor.kt:103` (`seekedTo`), `:119` (`writtenPositionMs`), `:185` (`onFlush`). Landed in commit `75bc828`.
 
-**Ask.** Nothing to ask of Amazon here — this is an AndroidX Media3 gap, already closed upstream by 1.11.0. Recorded because the gap between "pinned version" and "current upstream source" is exactly the trap: reading the library's latest source without checking the actual pinned jar would have missed that 1.4.1 predates the fix entirely.
+**Suggestion.** Nothing to ask of Amazon here — this is an AndroidX Media3 gap, already closed upstream by 1.11.0. Recorded because the gap between "pinned version" and "current upstream source" is exactly the trap: reading the library's latest source without checking the actual pinned jar would have missed that 1.4.1 predates the fix entirely.
 
 ---
 
@@ -437,9 +555,16 @@ So on 1.4.1, `DuckingAudioProcessor` gets no platform-given signal that a seek h
 **Severity:** high — this one pattern sat on the path every track load calls, so its failure meant no disclosure, no descriptions, no subtitles and no narration spoke at all
 **Area:** `java.util.regex` / Dalvik vs. desktop JVM (API 28)
 
-**What was attempted.** Strip SSA/ASS override codes such as `{\an8}` out of a subtitle cue's text before it is spoken or shown, using a regex written and tested entirely on the desktop toolchain — the pattern lives in the pure-JVM `:director` module, and all 318 JVM test executions were green before this ever ran on a device.
+**Task attempted.** Strip SSA/ASS override codes such as `{\an8}` out of a subtitle cue's text before it is spoken or shown, using a regex written and tested entirely on the desktop toolchain — the pattern lives in the pure-JVM `:director` module, and all 318 JVM test executions were green before this ever ran on a device.
 
-**What happened.** On the Fire TV Stick (AFTSSS, Fire OS 7.7.1.5, Android 9 / API 28) track preparation failed the instant the track loaded:
+**Steps taken.**
+1. Wrote and tested the SSA-override strip on the desktop JVM; all 318 JVM test executions passed.
+2. Ran the build on the Fire TV Stick.
+3. Probed the patterns on the device with `app_process`.
+
+**Expected result.** A pattern that compiles on the JVM compiles on the device.
+
+**Actual result.** On the Fire TV Stick (AFTSSS, Fire OS 7.7.1.5, Android 9 / API 28) track preparation failed the instant the track loaded:
 
 ```
 09-12 17:41:13.320 I/Baton   (10945): track loaded asset=sample_clip.track.json source=sintel-01m41s-de-dub locale=en-US cues=6 gaps=11 synthetic=true
@@ -456,7 +581,7 @@ Because the exception was thrown during track preparation, nothing downstream ev
 
 **Workaround (shipped).** Escape the closing brace: `\{[^}]*\}` (`aa5fced`).
 
-**Ask.** Nothing to ask of Amazon or Google here — a bare `}` outside a quantifier being invalid under ICU and valid under OpenJDK's own regex engine is a pre-existing divergence between two independently-maintained regex engines, not a Fire OS defect. Recorded because of what it costs a JVM-only test suite: a pattern that passed every JVM test was a syntax error on the device, and only a run on Android's own runtime (a device or an emulator) could have shown it.
+**Suggestion.** Nothing to ask of Amazon or Google here — a bare `}` outside a quantifier being invalid under ICU and valid under OpenJDK's own regex engine is a pre-existing divergence between two independently-maintained regex engines, not a Fire OS defect. Recorded because of what it costs a JVM-only test suite: a pattern that passed every JVM test was a syntax error on the device, and only a run on Android's own runtime (a device or an emulator) could have shown it.
 
 ---
 
@@ -465,9 +590,16 @@ Because the exception was thrown during track preparation, nothing downstream ev
 **Severity:** high — the film itself never started
 **Area:** AndroidX Media3 datasource (pinned 1.4.1) / Android Asset Packaging Tool
 
-**What was attempted.** Ship a bundled English subtitle sidecar, `res/raw/sample_clip_en.srt`, as a `SubtitleConfiguration` on the same `MediaItem` as the film's video and audio, opened by Media3's `RawResourceDataSource`.
+**Task attempted.** Ship a bundled English subtitle sidecar, `res/raw/sample_clip_en.srt`, as a `SubtitleConfiguration` on the same `MediaItem` as the film's video and audio, opened by Media3's `RawResourceDataSource`.
 
-**What happened.** On the Fire TV Stick the film never started. The full exception chain, `stick_run2/full_logcat.txt:371-397`:
+**Steps taken.**
+1. Added the `.srt` as a `SubtitleConfiguration` on the film's `MediaItem`.
+2. Ran on the Stick and read the exception chain.
+3. Decompiled `RawResourceDataSource` from the 1.4.1 AAR.
+
+**Expected result.** The film plays; a subtitle file that cannot open costs at most the subtitles.
+
+**Actual result.** On the Fire TV Stick the film never started. The full exception chain, `stick_run2/full_logcat.txt:371-397`:
 
 ```
 E/ExoPlayerImplInternal: Playback error
@@ -493,7 +625,7 @@ Baton bundles the subtitle sidecar on the same `MediaItem` as the video and audi
 
 **Workaround (shipped).** `androidResources { noCompress += "srt" }` in `app/build.gradle.kts` (`cbab06b`, AGP 8.6.1). `unzip -v` on the rebuilt APK shows the entry `Stored` rather than deflated (`cbab06b`'s commit message: 785 bytes, stored).
 
-**Ask.** The three-layer exception a developer actually sees — `RawResourceDataSourceException` → `Resources$NotFoundException` → `FileNotFoundException`: "it is probably compressed" — never names Gradle, `aapt`, or `noCompress`; the message is accurate but the fix lives one abstraction layer below anything in the trace. A line in `RawResourceDataSource`'s own documentation, pointing at `androidResources.noCompress` for any raw-resource extension outside the platform's default no-compress list, would turn this from an afternoon of exception-chain archaeology into a one-line fix from the start.
+**Suggestion.** The three-layer exception a developer actually sees — `RawResourceDataSourceException` → `Resources$NotFoundException` → `FileNotFoundException`: "it is probably compressed" — never names Gradle, `aapt`, or `noCompress`; the message is accurate but the fix lives one abstraction layer below anything in the trace. A line in `RawResourceDataSource`'s own documentation, pointing at `androidResources.noCompress` for any raw-resource extension outside the platform's default no-compress list, would turn this from an afternoon of exception-chain archaeology into a one-line fix from the start.
 
 ---
 
@@ -502,9 +634,16 @@ Baton bundles the subtitle sidecar on the same `MediaItem` as the video and audi
 **Severity:** medium — a second voice, outside the director, in exactly the moments the product exists to keep clean
 **Area:** Fire OS 7 VoiceView (`com.amazon.logan`) / Android accessibility
 
-**What was attempted.** Baton speaks its own UI through the audio director and marks every Compose node `invisibleToUser`, so that with VoiceView on the viewer hears one voice, Baton's (README, "Remote bindings" and the #6 shell). The check was a listened run on the Fire TV Stick with VoiceView switched on in Settings, moving focus along the transport bar and the access-services row and toggling the screen curtain.
+**Task attempted.** Baton speaks its own UI through the audio director and marks every Compose node `invisibleToUser`, so that with VoiceView on the viewer hears one voice, Baton's (README, "Remote bindings" and the #6 shell). The check was a listened run on the Fire TV Stick with VoiceView switched on in Settings, moving focus along the transport bar and the access-services row and toggling the screen curtain.
 
-**What happened.** Moving focus, VoiceView stayed silent and only Baton's narration played. But VoiceView spoke three times on its own, with no key pressed for the first: once 2.1 s after playback started, and once each as the screen curtain went on and off. The system log brackets each one (`.temp/voiceview_runB/all.txt`, Baton's own lines interleaved):
+**Steps taken.**
+1. Switched VoiceView on in Settings.
+2. Played the film, moved focus across both control rows, and toggled the screen curtain.
+3. Read logcat, `uiautomator dump` and `uiautomator events` for what VoiceView said.
+
+**Expected result.** With every node hidden from it, VoiceView stays silent, or at least tells the app when it speaks.
+
+**Actual result.** Moving focus, VoiceView stayed silent and only Baton's narration played. But VoiceView spoke three times on its own, with no key pressed for the first: once 2.1 s after playback started, and once each as the screen curtain went on and off. The system log brackets each one (`.temp/voiceview_runB/all.txt`, Baton's own lines interleaved):
 
 ```
 14:57:25.462 I/Baton   (30435): playback starting
@@ -527,7 +666,7 @@ Two further costs. VoiceView could not be enabled for a test over `adb`: no inst
 
 **Workaround.** Shipped in `e8b93a4`, and it works on the device. Baton holds audio focus (`AUDIOFOCUS_GAIN`, `setWillPauseWhenDucked(true)`) while it is started. VoiceView's request is `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK` (`req=3`), which hands the holder `AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK` (AOSP 9 `FocusRequester.java:287-291`); the flag is what makes the framework tell the holder instead of ducking it silently (`FocusRequester.java:356-382, 408-418`). On the Fire TV Stick on 2026-09-18, a probe build received the loss 2–24 ms after each VoiceView request and the gain 1–137 ms after each abandon, 3 of 3. While focus is lost the director yields completely: what Baton is saying is cut, nothing new starts, a cue that comes due is dropped as `YieldedToExternalVoice`, and a button press is refused as `reason=external-voice`. In the full run with VoiceView on, VoiceView took focus and Baton's voice was released 24 ms later, two descriptions and two button presses were turned away while it spoke, and the next description played normally once focus came back (`.temp/stick_0918/yield_vv.log`). In that run VoiceView also spoke for about 10 s after a Down press into the access-services row, where the 2026-09-16 run heard it stay silent on focus moves; what it said is still not recorded. This works around the missing signal rather than supplying it: Baton cannot tell VoiceView from any other app that takes transient focus, and it only learns about VoiceView after VoiceView has asked, so the first few milliseconds may still overlap (not measured; that needs the HDMI capture).
 
-**Ask.** A documented, app-readable "VoiceView is speaking" signal — the `VoiceViewEventProvider` event already exists on the device — and a documented service identifier for VoiceView, so a self-voicing app can coordinate with it rather than guess. Entry 1 asks for the same class of primitive from the audio side.
+**Suggestion.** A documented, app-readable "VoiceView is speaking" signal — the `VoiceViewEventProvider` event already exists on the device — and a documented service identifier for VoiceView, so a self-voicing app can coordinate with it rather than guess. Entry 1 asks for the same class of primitive from the audio side.
 
 ---
 
@@ -536,9 +675,16 @@ Two further costs. VoiceView could not be enabled for a test over `adb`: no inst
 **Severity:** medium — the live transcription slice cannot run on the account the project was built on
 **Area:** AWS account plans / Amazon Transcribe (us-east-1), AWS SDK for Java v2 2.54.19
 
-**What was attempted.** One live Transcribe job on the 88.6 s demo clip, through `:pipeline:transcribeSmoke` (issue #11, slice S2): upload to S3, `StartTranscriptionJob` with `de-DE`, poll, read the output back.
+**Task attempted.** One live Transcribe job on the 88.6 s demo clip, through `:pipeline:transcribeSmoke` (issue #11, slice S2): upload to S3, `StartTranscriptionJob` with `de-DE`, poll, read the output back.
 
-**What happened.** The S3 upload succeeded and `StartTranscriptionJob` did not:
+**Steps taken.**
+1. Ran `:pipeline:transcribeSmoke`: upload to S3, then `StartTranscriptionJob` with `de-DE`.
+2. Read the account plan with `aws freetier get-account-plan-state`.
+3. Upgraded the account to the paid plan and re-ran.
+
+**Expected result.** The job runs, or the error names the real reason it cannot.
+
+**Actual result.** The S3 upload succeeded and `StartTranscriptionJob` did not:
 
 ```
 software.amazon.awssdk.services.transcribe.model.TranscribeException: The AWS Access Key Id needs a subscription for the service (Service: Transcribe, Status Code: 400, ...)
@@ -550,7 +696,7 @@ The same account's Amazon Polly calls succeed (S1's smoke call, billed 56 charac
 
 **Workaround.** Upgrading the account to the paid plan (2026-09-17; the $119.99 of Free Tier credits carried over). The same command then succeeded: 62 words, `de-DE`, 11 dialogue spans. That confirms the inference above as far as one before-and-after can.
 
-**Ask.** An error that says what it means — "this service is not available on the Free account plan" — and a published list of which services a free plan excludes. A hackathon on AWS will put a lot of new accounts on exactly this plan.
+**Suggestion.** An error that says what it means — "this service is not available on the Free account plan" — and a published list of which services a free plan excludes. A hackathon on AWS will put a lot of new accounts on exactly this plan.
 
 ---
 
