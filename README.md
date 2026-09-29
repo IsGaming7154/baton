@@ -6,7 +6,7 @@ Build, Ship, Shape: Amazon Developer Hackathon · Fire TV track. Target device: 
 
 A blind viewer puts on a foreign-language film. To watch it they need three things switched on at once: audio description, so they know what is happening on screen; spoken subtitles, because they cannot read the translation; and the VoiceView screen reader, because that is how they operate the television at all.
 
-All three speak. They speak simultaneously, on top of the actors, and nothing on the platform decides who gets the room. The result is not degraded — it is unusable. Amazon's own documented advice is to switch VoiceView off, which trades the ability to hear the television for the ability to operate it.
+All three speak. They speak simultaneously, on top of the actors, and nothing on the platform decides who gets the room. The result is not degraded — it is unusable. Blind users report switching VoiceView off to escape it, which trades the ability to operate the television for the ability to hear it.
 
 Fire OS has no hierarchy of auditory focus. There is no arbitration layer, and no API through which one service can even learn that another is speaking.
 

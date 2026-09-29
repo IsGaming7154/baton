@@ -69,7 +69,7 @@ adb shell am start -S -n dev.baton.tv/.MainActivity     --ez meter true --ez sil
 
 **Actual result.** Nothing decides. There is no arbitration layer and no API through which one service can learn that another is speaking. All of them speak simultaneously. For a blind viewer watching foreign-language content — the case where all three services are genuinely needed at once — the result is three overlapping voices plus the original dialogue.
 
-**Workaround.** Amazon's own documented advice is to disable VoiceView. That restores intelligibility at the cost of the user's ability to operate the television. There is no workaround that preserves both.
+**Workaround.** Blind users report turning VoiceView off to escape the overlap ([r/Blind](https://www.reddit.com/r/Blind/comments/revt97/three_audio_tracks_on_amazon_fire_tv_while/)). That restores intelligibility at the cost of the user's ability to operate the television. There is no workaround that preserves both.
 
 **Suggestion (feature request).** Fire OS should expose an **acoustic priority API**: a system-level service through which any component that intends to speak declares an utterance with a priority class, and receives back either a grant or a deferral. Minimum viable surface:
 
@@ -301,7 +301,7 @@ Three distinct problems are visible in that table.
 
 **Why this matters beyond one bug.** The engine that works out of the box is a 2010-era formant synthesiser at 16 kHz. The engine that sounds good is IVONA — the same lineage as Amazon Polly, and the voice VoiceView itself speaks with. It is present on every device, it is the documented default, and it is inert until the screen reader has been enabled once.
 
-There is a further turn, and it lands on this project's thesis. The path that provisions the good voice is enabling VoiceView. But Amazon's own published remedy for simultaneous audio description and screen-reader speech — the defect described in entry 1 of this log — is to *disable* VoiceView. A user who follows Amazon's accessibility guidance to the letter on a fresh device therefore never triggers provisioning, and every application on that device, including the accessibility applications that need it most, is left with the worse voice and no indication that a better one exists.
+There is a further turn, and it lands on this project's thesis. The path that provisions the good voice is enabling VoiceView. But the workaround blind users report for simultaneous audio description and screen-reader speech — the defect described in entry 1 of this log — is to *disable* VoiceView. A user who does that on a fresh device therefore never triggers provisioning, and every application on that device, including the accessibility applications that need it most, is left with the worse voice and no indication that a better one exists.
 
 **Suggestion (feature request).** Three, in order of value:
 
