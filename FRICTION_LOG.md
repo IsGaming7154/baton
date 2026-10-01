@@ -700,4 +700,34 @@ The same account's Amazon Polly calls succeed (S1's smoke call, billed 56 charac
 
 ---
 
+## 21. Amazon Bedrock stays `NOT_AUTHORIZED` on a new paid account, says verification "normally takes less than 2 hours", and two weeks later refuses
+
+**Severity:** high — the description-drafting stage (Nova) cannot run on this account inside the hackathon window
+**Area:** Amazon Bedrock model access, AWS account verification, AWS Support (us-east-1; account billed by AWS India / AISPL)
+
+**Task attempted.** One live Bedrock `Converse` call to Nova 2 Lite through `:pipeline:novaSmoke` (issue #11, slice S3), to draft descriptions for the demo clip's silences.
+
+**Steps taken.**
+1. Upgraded the account to the paid plan on 2026-09-17 (08:59), the step that had unblocked Transcribe in entry 20.
+2. Added an IAM policy for `bedrock:InvokeModel` and the model-access read calls, and ran `:pipeline:novaSmoke` with the inference profile `us.amazon.nova-2-lite-v1:0`.
+3. Read the model's status with `aws bedrock get-foundation-model-availability`.
+4. Tried the same model as the root user in the Bedrock console playground.
+5. Opened an AWS support case, and waited.
+
+**Expected result.** Model access within the two hours the console promised, or an error that says what the account lacks and what would grant it.
+
+**Actual result.** The first call returned 403: "Your account is currently being verified. Verification normally takes less than 2 hours." Two and a half hours after the upgrade, `get-foundation-model-availability` showed `"authorizationStatus": "NOT_AUTHORIZED"` for Nova 2 Lite, Nova Lite and Nova Pro, with agreement, entitlement and region all `AVAILABLE`. The root user's playground showed the same verification message. The status was unchanged on 2026-10-01. On 2026-09-28 support said the review was still going. By 2026-10-01 the case was closed with a refusal:
+
+> In order to maintain the performance of the service and to ensure appropriate usage of Amazon Bedrock, your default quotas or model access might be updated depending on regional factors, payment history, your past Bedrock usage, and surge in demand. Given these factors, we are unable to process your request at this point. […] We would request you to utilize your current limits and build usage and spending history before granting such a request. […] After the next billing cycle, request the quota increase again.
+
+Nothing the account could read before the case named a criterion: how much usage, how much spend, or how long. The account's AWS credits ($119.99, carried over from the Free plan) could not be spent on Bedrock at all.
+
+**Sources.** The `novaSmoke` 403 (2026-09-17); `aws bedrock get-foundation-model-availability --model-id amazon.nova-2-lite-v1:0 --region us-east-1` (2026-09-17 and 2026-10-01); the support case's closing reply (quoted above, received by 2026-10-01). Established: the messages, the status, the refusal. Inferred: that "the next billing cycle" falls after the 23 October deadline, since AWS bills by calendar month and October's cycle ends on 31 October.
+
+**Workaround.** None for Nova. `NovaDrafting` stays built and tested against a fake client, the spend guard and build-time cue checks run in tests, and the demo plays a bundled description track. Transcribe and Polly, the other two stages, ran live.
+
+**Suggestion.** If an account's history decides model access, say so where access is requested, with the criterion, instead of "less than 2 hours". Let credits that AWS itself granted count as history, or give hackathon participants a documented path to Bedrock: a hackathon on AWS will put many new accounts in exactly this position.
+
+---
+
 *Entries are appended as they are encountered. This log is a deliverable, not a postscript.*
