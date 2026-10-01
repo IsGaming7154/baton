@@ -75,6 +75,15 @@ tasks.register<JavaExec>("novaSmoke") {
     mainClass.set("dev.baton.pipeline.live.NovaSmokeKt")
 }
 
+// The same run with the Gemini API's free tier drafting in Nova's place (AWS declined Bedrock
+// access for this account, friction-log entry 21). Needs GEMINI_API_KEY. Never wired into build or test:
+//   gradlew :pipeline:geminiSmoke --args=<media>,<transcript.json>,<model id>,<duration ms>,<out track.json>
+tasks.register<JavaExec>("geminiSmoke") {
+    description = "Drafts a track with live Gemini API calls on the free tier."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.baton.pipeline.live.GeminiSmokeKt")
+}
+
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
     // Lets the golden-file test rewrite its expectation on demand. Gradle's own
