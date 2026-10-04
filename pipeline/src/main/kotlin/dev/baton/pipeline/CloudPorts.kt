@@ -82,6 +82,12 @@ data class DraftRequest(
     /** Which description within [SceneContext.gap] this is, counting from zero. */
     val cueOrdinal: Int = 0,
     val previousText: String? = null,
+    /**
+     * The stretch of [SceneContext.gap] this description will be spoken over: from where the
+     * cue starts to the end of the room it is offered. A long silence holds several cues, and
+     * a drafter shown the whole window cannot tell which moment of it a cue is for.
+     */
+    val slot: Gap = scene.gap,
 ) {
     init {
         require(targetDurationMs > 0) { "a draft target of $targetDurationMs ms asks for nothing" }

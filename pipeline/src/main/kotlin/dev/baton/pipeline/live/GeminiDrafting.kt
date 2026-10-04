@@ -97,7 +97,26 @@ class GeminiDrafting(
         return parse(reply)
     }
 
-    internal fun requestBody(request: DraftRequest): String = buildJsonObject {
+    /**
+     * Only the cue's own slot, plus [LEAD_IN_MS] before it so the model sees what led into it, is
+     * sent as video. Shown all 88 s, flash-lite had to guess where in the clip a silence fell and
+     * described events from elsewhere in the film, some that never happen; shown a whole 32 s
+     * silence for each of its nine cues, it still wrote a dragon stabbed and killed that is alive
+     * on screen (2026-10-01, 2026-10-04).
+     */
+    internal fun requestBody(request: DraftRequest): String {
+        val slot = request.slot
+        return requestBody(request, (slot.startMs - LEAD_IN_MS).coerceAtLeast(0), slot.endMs)
+    }
+
+    private fun segmentNote(request: DraftRequest, from: Long, to: Long): String =
+        "This description is spoken from ${seconds(request.slot.startMs)} s to at most ${seconds(request.slot.endMs)} s. " +
+            "The video you are given is only ${seconds(from)} s to ${seconds(to)} s of the clip. " +
+            "Describe only what is visible in it at that moment; never guess at anything outside it.\n"
+
+    private fun seconds(ms: Long): String = "%.1f".format(java.util.Locale.ROOT, ms / 1000.0)
+
+    private fun requestBody(request: DraftRequest, from: Long, to: Long): String = buildJsonObject {
         putJsonObject("systemInstruction") {
             putJsonArray("parts") { add(buildJsonObject { put("text", NovaPrompt.system) }) }
         }
@@ -106,8 +125,13 @@ class GeminiDrafting(
                 buildJsonObject {
                     put("role", "user")
                     putJsonArray("parts") {
-                        add(buildJsonObject { putJsonObject("inlineData") { put("mimeType", mimeType); put("data", video) } })
-                        add(buildJsonObject { put("text", NovaPrompt.user(request)) })
+                        add(
+                            buildJsonObject {
+                                putJsonObject("inlineData") { put("mimeType", mimeType); put("data", video) }
+                                putJsonObject("videoMetadata") { put("startOffset", "${seconds(from)}s"); put("endOffset", "${seconds(to)}s") }
+                            },
+                        )
+                        add(buildJsonObject { put("text", NovaPrompt.user(request) + segmentNote(request, from, to)) })
                     }
                 },
             )
@@ -165,7 +189,7 @@ class GeminiDrafting(
         private val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build()
 
         override fun post(url: String, body: String): Pair<Int, String> {
-            require(!apiKey.isNullOrBlank()) { "no Gemini API key: set GEMINI_API_KEY, or put the key alone in $KEY_FILE" }
+            require(!apiKey.isNullOrBlank()) { "no Gemini API key: set GEMINI_API_KEY, or add a GEMINI_API_KEY= line to $KEY_FILE" }
             val request = HttpRequest.newBuilder(URI.create(url))
                 .timeout(Duration.ofMinutes(3))
                 .header("Content-Type", "application/json")
@@ -181,13 +205,24 @@ class GeminiDrafting(
         /** "under 20MB total request size" (ai.google.dev/gemini-api/docs/video-understanding); 1 MB left for the prompt. */
         const val INLINE_BASE64_LIMIT: Long = 19_000_000
 
+        /** Seconds of film sent before the silence, so a description can follow on from what led into it. */
+        const val LEAD_IN_MS: Long = 2_000
+
         private val VIDEO_TYPES = mapOf("mp4" to "video/mp4", "mov" to "video/quicktime", "webm" to "video/webm")
 
         /** Beside the spend ledger, outside the repository, so the key is never committed. */
-        val KEY_FILE: Path = Path.of(System.getProperty("user.home"), ".baton", "gemini-api-key")
+        val KEY_FILE: Path = Path.of(System.getProperty("user.home"), ".baton", ".env")
 
         fun apiKey(): String? =
-            System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() }
-                ?: KEY_FILE.takeIf { Files.isRegularFile(it) }?.let { Files.readString(it).trim() }?.takeIf { it.isNotEmpty() }
+            System.getenv("GEMINI_API_KEY")?.takeIf { it.isNotBlank() } ?: keyFromEnvFile(KEY_FILE)
+
+        /** The value of a `GEMINI_API_KEY=` line, any case, spaces and quotes trimmed. */
+        fun keyFromEnvFile(file: Path): String? {
+            if (!Files.isRegularFile(file)) return null
+            return Files.readAllLines(file).asSequence()
+                .map { it.removePrefix("﻿").split('=', limit = 2) }
+                .firstOrNull { it.size == 2 && it[0].trim().equals("GEMINI_API_KEY", ignoreCase = true) }
+                ?.get(1)?.trim()?.trim('"', '\'')?.trim()?.takeIf { it.isNotEmpty() }
+        }
     }
 }

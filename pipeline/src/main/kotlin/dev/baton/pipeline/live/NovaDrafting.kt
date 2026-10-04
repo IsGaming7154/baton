@@ -157,7 +157,7 @@ If there is nothing new to describe, or nothing shorter to offer when asked, rep
         val previous = request.previousText
         when {
             previous != null && request.attempt > 0 ->
-                appendLine("The last version was too long or needs a shorter alternative: \"$previous\". Write a shorter one.")
+                appendLine("The last version was too long or needs a shorter alternative: \"$previous\". Write a shorter one: cut words from it rather than decline.")
             previous != null ->
                 appendLine("Already described in this silence: \"$previous\". Describe what happens next, without repeating it.")
         }

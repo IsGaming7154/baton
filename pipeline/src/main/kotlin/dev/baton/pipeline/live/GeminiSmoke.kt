@@ -4,6 +4,7 @@ import dev.baton.director.DescriptionTrackJson
 import dev.baton.pipeline.BuildRequest
 import dev.baton.pipeline.DescriptionTrackBuilder
 import dev.baton.pipeline.MediaRef
+import dev.baton.pipeline.PipelineConfig
 import dev.baton.pipeline.mock.RecordedTranscription
 import dev.baton.pipeline.mock.SimulatedSynthesis
 import java.nio.file.Files
@@ -32,11 +33,13 @@ fun main(rawArgs: Array<String>) {
     val out = Path.of(args[4]).toAbsolutePath()
 
     println("model $modelId on the Gemini free tier; media $media")
-    val gemini = GeminiDrafting(modelId, media)
+    val gemini = GeminiDrafting(modelId, media, maxCalls = 120)
+    // A live model fills whatever room it is offered; 4.5 s is the longest cue in the hand-written demo track.
+    val config = PipelineConfig(maxCueMs = 4_500)
     val request = BuildRequest(MediaRef(media.toString()), media.fileName.toString().substringBeforeLast('.'), durationMs)
     var failed = false
     try {
-        val result = DescriptionTrackBuilder(RecordedTranscription(transcriptFile.readText()), gemini, SimulatedSynthesis()).build(request)
+        val result = DescriptionTrackBuilder(RecordedTranscription(transcriptFile.readText()), gemini, SimulatedSynthesis(), config).build(request)
         Files.createDirectories(out.parent)
         out.writeText(DescriptionTrackJson.encode(result.track))
         println("wrote $out")

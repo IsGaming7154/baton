@@ -101,10 +101,15 @@ class DescriptionTrackBuilder(
             var cursorMs = gap.startMs + config.cueLeadInMs
             var ordinal = 0
             var previousText: String? = null
+            var skipped: AuthoringDropReason? = null
 
             while (true) {
                 val cueId = cueIdFor(gap, ordinal)
                 val roomMs = gap.endMs - config.guardMs - cursorMs
+                if (ordinal == 0 && skipped != null && roomMs < config.minimumCueRoomMs) {
+                    drops += AuthoringDrop(cueId, gap, skipped)
+                    break
+                }
                 if (ordinal == 0) {
                     val overheadMs = config.cueLeadInMs + config.guardMs
                     if (roomMs <= 0) {
@@ -119,7 +124,8 @@ class DescriptionTrackBuilder(
                     break
                 }
 
-                val outcome = fit(scene, roomMs, ordinal, previousText)
+                val offeredMs = config.maxCueMs?.coerceAtMost(roomMs) ?: roomMs
+                val outcome = fit(scene, Gap(cursorMs, cursorMs + offeredMs), offeredMs, ordinal, previousText)
                 fits += FitRecord(
                     cueId = cueId,
                     gap = gap,
@@ -130,6 +136,13 @@ class DescriptionTrackBuilder(
                 )
 
                 if (outcome.variants.isEmpty()) {
+                    // A capped slot is a few seconds of a longer silence, and having nothing to
+                    // say over those seconds says nothing about the rest of it: move on a slot.
+                    if (offeredMs < roomMs) {
+                        if (ordinal == 0) skipped = skipped ?: outcome.dropReason(roomMs)
+                        cursorMs += offeredMs
+                        continue
+                    }
                     if (ordinal == 0) drops += AuthoringDrop(cueId, gap, outcome.dropReason(roomMs))
                     break
                 }
@@ -234,7 +247,7 @@ class DescriptionTrackBuilder(
      * -- which is the one thing a drafter needs in order not to describe the same
      * moment twice.
      */
-    private fun fit(scene: SceneContext, roomMs: Long, cueOrdinal: Int, priorText: String?): FitOutcome {
+    private fun fit(scene: SceneContext, slot: Gap, roomMs: Long, cueOrdinal: Int, priorText: String?): FitOutcome {
         val variants = mutableListOf<Variant>()
         var draftsRequested = 0
         var draftsOverrun = 0
@@ -249,6 +262,7 @@ class DescriptionTrackBuilder(
                 attempt = draftsRequested,
                 cueOrdinal = cueOrdinal,
                 previousText = previousText,
+                slot = slot,
             )
             val draft = drafting.draft(request) ?: break
             draftsRequested++

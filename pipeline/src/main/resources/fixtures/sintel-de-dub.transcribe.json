@@ -1,0 +1,1077 @@
+{
+ "jobName": "baton-97be3b9f-e34c-4662-bcc5-9506e2f8f2a8",
+ "status": "COMPLETED",
+ "results": {
+  "transcripts": [
+   {
+    "transcript": "Die Klinge birgt eine finstere Vergangenheit. durch sie wurde viel unschuldiges G vergossen. töricht, allein und völlig unvorbereitet zu reisen. Du hast Glück, dass dein Blut noch fließt. Danke. also. Was führt dich in die Lande der Torwächter? Ich suche jemanden. Ein teurer Freund, eine verwandte Seele. Ein Drache. gefährlich für eine einsame Jägerin. Ich bin einsam, solange ich mich erinnern kann."
+   }
+  ],
+  "items": [
+   {
+    "id": 0,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.304",
+      "content": "Die"
+     }
+    ],
+    "start_time": "4.09",
+    "end_time": "4.389"
+   },
+   {
+    "id": 1,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "Klinge"
+     }
+    ],
+    "start_time": "4.389",
+    "end_time": "4.789"
+   },
+   {
+    "id": 2,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "birgt"
+     }
+    ],
+    "start_time": "4.789",
+    "end_time": "5.11"
+   },
+   {
+    "id": 3,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "eine"
+     }
+    ],
+    "start_time": "5.11",
+    "end_time": "5.269"
+   },
+   {
+    "id": 4,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.995",
+      "content": "finstere"
+     }
+    ],
+    "start_time": "5.269",
+    "end_time": "5.75"
+   },
+   {
+    "id": 5,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.997",
+      "content": "Vergangenheit"
+     }
+    ],
+    "start_time": "5.75",
+    "end_time": "6.369"
+   },
+   {
+    "id": 6,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "."
+     }
+    ]
+   },
+   {
+    "id": 7,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.731",
+      "content": "durch"
+     }
+    ],
+    "start_time": "9.979",
+    "end_time": "10.26"
+   },
+   {
+    "id": 8,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.958",
+      "content": "sie"
+     }
+    ],
+    "start_time": "10.26",
+    "end_time": "10.42"
+   },
+   {
+    "id": 9,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.998",
+      "content": "wurde"
+     }
+    ],
+    "start_time": "10.42",
+    "end_time": "10.739"
+   },
+   {
+    "id": 10,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.998",
+      "content": "viel"
+     }
+    ],
+    "start_time": "10.739",
+    "end_time": "10.979"
+   },
+   {
+    "id": 11,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.702",
+      "content": "unschuldiges"
+     }
+    ],
+    "start_time": "10.979",
+    "end_time": "11.93"
+   },
+   {
+    "id": 12,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.284",
+      "content": "G"
+     }
+    ],
+    "start_time": "11.93",
+    "end_time": "11.939"
+   },
+   {
+    "id": 13,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.987",
+      "content": "vergossen"
+     }
+    ],
+    "start_time": "11.939",
+    "end_time": "12.38"
+   },
+   {
+    "id": 14,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "."
+     }
+    ]
+   },
+   {
+    "id": 15,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.933",
+      "content": "töricht"
+     }
+    ],
+    "start_time": "15.97",
+    "end_time": "16.45"
+   },
+   {
+    "id": 16,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": ","
+     }
+    ]
+   },
+   {
+    "id": 17,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.985",
+      "content": "allein"
+     }
+    ],
+    "start_time": "16.489",
+    "end_time": "16.889"
+   },
+   {
+    "id": 18,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "und"
+     }
+    ],
+    "start_time": "16.889",
+    "end_time": "17.09"
+   },
+   {
+    "id": 19,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.998",
+      "content": "völlig"
+     }
+    ],
+    "start_time": "17.09",
+    "end_time": "17.409"
+   },
+   {
+    "id": 20,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.996",
+      "content": "unvorbereitet"
+     }
+    ],
+    "start_time": "17.409",
+    "end_time": "18.25"
+   },
+   {
+    "id": 21,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "zu"
+     }
+    ],
+    "start_time": "18.25",
+    "end_time": "18.409"
+   },
+   {
+    "id": 22,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.996",
+      "content": "reisen"
+     }
+    ],
+    "start_time": "18.409",
+    "end_time": "18.729"
+   },
+   {
+    "id": 23,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "."
+     }
+    ]
+   },
+   {
+    "id": 24,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.994",
+      "content": "Du"
+     }
+    ],
+    "start_time": "18.93",
+    "end_time": "19.129"
+   },
+   {
+    "id": 25,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "hast"
+     }
+    ],
+    "start_time": "19.129",
+    "end_time": "19.409"
+   },
+   {
+    "id": 26,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "Glück"
+     }
+    ],
+    "start_time": "19.409",
+    "end_time": "19.69"
+   },
+   {
+    "id": 27,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": ","
+     }
+    ]
+   },
+   {
+    "id": 28,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.997",
+      "content": "dass"
+     }
+    ],
+    "start_time": "19.809",
+    "end_time": "20.01"
+   },
+   {
+    "id": 29,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.998",
+      "content": "dein"
+     }
+    ],
+    "start_time": "20.01",
+    "end_time": "20.209"
+   },
+   {
+    "id": 30,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "Blut"
+     }
+    ],
+    "start_time": "20.209",
+    "end_time": "20.45"
+   },
+   {
+    "id": 31,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "noch"
+     }
+    ],
+    "start_time": "20.45",
+    "end_time": "20.62"
+   },
+   {
+    "id": 32,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.91",
+      "content": "fließt"
+     }
+    ],
+    "start_time": "20.62",
+    "end_time": "20.969"
+   },
+   {
+    "id": 33,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "."
+     }
+    ]
+   },
+   {
+    "id": 34,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.806",
+      "content": "Danke"
+     }
+    ],
+    "start_time": "24.59",
+    "end_time": "25.069"
+   },
+   {
+    "id": 35,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "."
+     }
+    ]
+   },
+   {
+    "id": 36,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.674",
+      "content": "also"
+     }
+    ],
+    "start_time": "27.0",
+    "end_time": "27.51"
+   },
+   {
+    "id": 37,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "."
+     }
+    ]
+   },
+   {
+    "id": 38,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.991",
+      "content": "Was"
+     }
+    ],
+    "start_time": "28.75",
+    "end_time": "29.079"
+   },
+   {
+    "id": 39,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.997",
+      "content": "führt"
+     }
+    ],
+    "start_time": "29.079",
+    "end_time": "29.319"
+   },
+   {
+    "id": 40,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.994",
+      "content": "dich"
+     }
+    ],
+    "start_time": "29.319",
+    "end_time": "29.52"
+   },
+   {
+    "id": 41,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "in"
+     }
+    ],
+    "start_time": "29.52",
+    "end_time": "29.639"
+   },
+   {
+    "id": 42,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.994",
+      "content": "die"
+     }
+    ],
+    "start_time": "29.639",
+    "end_time": "29.799"
+   },
+   {
+    "id": 43,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.998",
+      "content": "Lande"
+     }
+    ],
+    "start_time": "29.799",
+    "end_time": "30.12"
+   },
+   {
+    "id": 44,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.991",
+      "content": "der"
+     }
+    ],
+    "start_time": "30.12",
+    "end_time": "30.28"
+   },
+   {
+    "id": 45,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.988",
+      "content": "Torwächter"
+     }
+    ],
+    "start_time": "30.28",
+    "end_time": "30.879"
+   },
+   {
+    "id": 46,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "?"
+     }
+    ]
+   },
+   {
+    "id": 47,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.935",
+      "content": "Ich"
+     }
+    ],
+    "start_time": "35.81",
+    "end_time": "36.009"
+   },
+   {
+    "id": 48,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.998",
+      "content": "suche"
+     }
+    ],
+    "start_time": "36.009",
+    "end_time": "36.33"
+   },
+   {
+    "id": 49,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.992",
+      "content": "jemanden"
+     }
+    ],
+    "start_time": "36.33",
+    "end_time": "36.93"
+   },
+   {
+    "id": 50,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "."
+     }
+    ]
+   },
+   {
+    "id": 51,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.82",
+      "content": "Ein"
+     }
+    ],
+    "start_time": "37.25",
+    "end_time": "37.45"
+   },
+   {
+    "id": 52,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.996",
+      "content": "teurer"
+     }
+    ],
+    "start_time": "37.45",
+    "end_time": "37.81"
+   },
+   {
+    "id": 53,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "1.0",
+      "content": "Freund"
+     }
+    ],
+    "start_time": "37.81",
+    "end_time": "38.169"
+   },
+   {
+    "id": 54,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": ","
+     }
+    ]
+   },
+   {
+    "id": 55,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.779",
+      "content": "eine"
+     }
+    ],
+    "start_time": "38.689",
+    "end_time": "38.97"
+   },
+   {
+    "id": 56,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.991",
+      "content": "verwandte"
+     }
+    ],
+    "start_time": "38.97",
+    "end_time": "39.45"
+   },
+   {
+    "id": 57,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.996",
+      "content": "Seele"
+     }
+    ],
+    "start_time": "39.45",
+    "end_time": "39.77"
+   },
+   {
+    "id": 58,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "."
+     }
+    ]
+   },
+   {
+    "id": 59,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.989",
+      "content": "Ein"
+     }
+    ],
+    "start_time": "43.389",
+    "end_time": "43.569"
+   },
+   {
+    "id": 60,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.997",
+      "content": "Drache"
+     }
+    ],
+    "start_time": "43.569",
+    "end_time": "44.029"
+   },
+   {
+    "id": 61,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "."
+     }
+    ]
+   },
+   {
+    "id": 62,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.985",
+      "content": "gefährlich"
+     }
+    ],
+    "start_time": "47.729",
+    "end_time": "48.29"
+   },
+   {
+    "id": 63,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "für"
+     }
+    ],
+    "start_time": "48.29",
+    "end_time": "48.409"
+   },
+   {
+    "id": 64,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "eine"
+     }
+    ],
+    "start_time": "48.409",
+    "end_time": "48.569"
+   },
+   {
+    "id": 65,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.998",
+      "content": "einsame"
+     }
+    ],
+    "start_time": "48.569",
+    "end_time": "49.09"
+   },
+   {
+    "id": 66,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "Jägerin"
+     }
+    ],
+    "start_time": "49.09",
+    "end_time": "49.61"
+   },
+   {
+    "id": 67,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "."
+     }
+    ]
+   },
+   {
+    "id": 68,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.999",
+      "content": "Ich"
+     }
+    ],
+    "start_time": "53.52",
+    "end_time": "53.529"
+   },
+   {
+    "id": 69,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "1.0",
+      "content": "bin"
+     }
+    ],
+    "start_time": "53.869",
+    "end_time": "54.029"
+   },
+   {
+    "id": 70,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "1.0",
+      "content": "einsam"
+     }
+    ],
+    "start_time": "54.029",
+    "end_time": "54.59"
+   },
+   {
+    "id": 71,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": ","
+     }
+    ]
+   },
+   {
+    "id": 72,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "0.932",
+      "content": "solange"
+     }
+    ],
+    "start_time": "54.83",
+    "end_time": "55.27"
+   },
+   {
+    "id": 73,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "1.0",
+      "content": "ich"
+     }
+    ],
+    "start_time": "55.27",
+    "end_time": "55.43"
+   },
+   {
+    "id": 74,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "1.0",
+      "content": "mich"
+     }
+    ],
+    "start_time": "55.43",
+    "end_time": "55.59"
+   },
+   {
+    "id": 75,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "1.0",
+      "content": "erinnern"
+     }
+    ],
+    "start_time": "55.59",
+    "end_time": "56.11"
+   },
+   {
+    "id": 76,
+    "type": "pronunciation",
+    "alternatives": [
+     {
+      "confidence": "1.0",
+      "content": "kann"
+     }
+    ],
+    "start_time": "56.11",
+    "end_time": "56.389"
+   },
+   {
+    "id": 77,
+    "type": "punctuation",
+    "alternatives": [
+     {
+      "confidence": "0.0",
+      "content": "."
+     }
+    ]
+   }
+  ],
+  "audio_segments": [
+   {
+    "id": 0,
+    "transcript": "Die Klinge birgt eine finstere Vergangenheit.",
+    "start_time": "3.95",
+    "end_time": "6.5",
+    "items": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ]
+   },
+   {
+    "id": 1,
+    "transcript": "durch sie wurde viel unschuldiges G vergossen.",
+    "start_time": "9.819",
+    "end_time": "12.6",
+    "items": [
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14
+    ]
+   },
+   {
+    "id": 2,
+    "transcript": "töricht, allein und völlig unvorbereitet zu reisen. Du hast Glück, dass dein Blut noch fließt.",
+    "start_time": "15.85",
+    "end_time": "21.309",
+    "items": [
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33
+    ]
+   },
+   {
+    "id": 3,
+    "transcript": "Danke.",
+    "start_time": "24.389",
+    "end_time": "25.25",
+    "items": [
+     34,
+     35
+    ]
+   },
+   {
+    "id": 4,
+    "transcript": "also.",
+    "start_time": "26.84",
+    "end_time": "27.69",
+    "items": [
+     36,
+     37
+    ]
+   },
+   {
+    "id": 5,
+    "transcript": "Was führt dich in die Lande der Torwächter?",
+    "start_time": "28.639",
+    "end_time": "30.989",
+    "items": [
+     38,
+     39,
+     40,
+     41,
+     42,
+     43,
+     44,
+     45,
+     46
+    ]
+   },
+   {
+    "id": 6,
+    "transcript": "Ich suche jemanden. Ein teurer Freund, eine verwandte Seele.",
+    "start_time": "35.689",
+    "end_time": "39.919",
+    "items": [
+     47,
+     48,
+     49,
+     50,
+     51,
+     52,
+     53,
+     54,
+     55,
+     56,
+     57,
+     58
+    ]
+   },
+   {
+    "id": 7,
+    "transcript": "Ein Drache.",
+    "start_time": "43.27",
+    "end_time": "44.25",
+    "items": [
+     59,
+     60,
+     61
+    ]
+   },
+   {
+    "id": 8,
+    "transcript": "gefährlich für eine einsame Jägerin.",
+    "start_time": "47.61",
+    "end_time": "49.79",
+    "items": [
+     62,
+     63,
+     64,
+     65,
+     66,
+     67
+    ]
+   },
+   {
+    "id": 9,
+    "transcript": "Ich bin einsam, solange ich mich erinnern kann.",
+    "start_time": "53.509",
+    "end_time": "56.549",
+    "items": [
+     68,
+     69,
+     70,
+     71,
+     72,
+     73,
+     74,
+     75,
+     76,
+     77
+    ]
+   }
+  ]
+ }
+}

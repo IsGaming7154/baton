@@ -120,6 +120,13 @@ data class PipelineConfig(
 
     /** How many words of dialogue either side of a gap the drafter is shown. */
     val contextWords: Int = DEFAULT_CONTEXT_WORDS,
+
+    /**
+     * The most room one cue is offered, or null for the whole leftover. Without it a live
+     * model asked to fill a 32 s silence wrote one 30 s paragraph (Gemini, 2026-10-01);
+     * capped, the same silence is packed with several short cues instead.
+     */
+    val maxCueMs: Long? = null,
 ) {
     init {
         require(guardMs >= 0) { "guardMs must be >= 0, was $guardMs" }
@@ -132,6 +139,7 @@ data class PipelineConfig(
         require(variantShrinkFactor in 0.0..1.0) { "variantShrinkFactor must be in (0, 1], was $variantShrinkFactor" }
         require(overrunBackoff in 0.0..1.0) { "overrunBackoff must be in (0, 1], was $overrunBackoff" }
         require(contextWords >= 0) { "contextWords must be >= 0, was $contextWords" }
+        require(maxCueMs == null || maxCueMs > 0) { "maxCueMs must be > 0 when set, was $maxCueMs" }
         require(descriptionLocale.isNotBlank()) { "descriptionLocale must name a language" }
         require(variantSeparationMs > 0) {
             "variantSeparationMs must be > 0, was $variantSeparationMs; at zero two drafts of " +

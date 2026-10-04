@@ -44,8 +44,17 @@ class GeminiDraftingTest : FunSpec({
         val video = parts[0].jsonObject["inlineData"]!!.jsonObject
         video["mimeType"]!!.jsonPrimitive.content shouldBe "video/mp4"
         video["data"]!!.jsonPrimitive.content shouldBe "AQID"
+        val segment = parts[0].jsonObject["videoMetadata"]!!.jsonObject
+        segment["startOffset"]!!.jsonPrimitive.content shouldBe "10.0s"
+        segment["endOffset"]!!.jsonPrimitive.content shouldBe "16.0s"
         val text = parts[1].jsonObject["text"]!!.jsonPrimitive.content
         text shouldContain "12.0 s to 16.0 s"
+        text shouldContain "only 10.0 s to 16.0 s"
+
+        GeminiDrafting("gemini-test", clip(), transport).draft(ask.copy(slot = Gap(13_500, 16_000)))
+        val later = Json.parseToJsonElement(transport.posts.last().second).jsonObject["contents"]!!.jsonArray.single().jsonObject["parts"]!!.jsonArray
+        later[0].jsonObject["videoMetadata"]!!.jsonObject["startOffset"]!!.jsonPrimitive.content shouldBe "11.5s"
+        later[1].jsonObject["text"]!!.jsonPrimitive.content shouldContain "spoken from 13.5 s to at most 16.0 s"
         text shouldContain "at most 3.0 s"
         val config = sent["generationConfig"]!!.jsonObject
         config["maxOutputTokens"]!!.jsonPrimitive.content shouldBe "512"
@@ -107,8 +116,17 @@ class GeminiDraftingTest : FunSpec({
 
         val missing = shouldThrow<IllegalArgumentException> { GeminiDrafting.HttpTransport(null).post("https://x.test", "{}") }
         missing.message shouldContain "GEMINI_API_KEY"
-        missing.message shouldContain "gemini-api-key"
+        missing.message shouldContain ".env"
         missing.message shouldNotContain "null"
+    }
+
+    test("the key is read from a GEMINI_API_KEY line in any case, with spaces and quotes trimmed") {
+        val env = Files.createTempFile("baton", ".env")
+        Files.writeString(env, "OTHER=1\nGemini_Api_Key = \"k-1.2_3\"\n")
+        GeminiDrafting.keyFromEnvFile(env) shouldBe "k-1.2_3"
+        Files.writeString(env, "OTHER=1\n")
+        GeminiDrafting.keyFromEnvFile(env) shouldBe null
+        GeminiDrafting.keyFromEnvFile(env.resolveSibling("absent.env")) shouldBe null
     }
 })
 

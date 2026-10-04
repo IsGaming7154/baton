@@ -16,6 +16,8 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.longs.shouldBeGreaterThan
+import io.kotest.matchers.longs.shouldBeLessThanOrEqual
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldStartWith
@@ -345,6 +347,40 @@ class DescriptionTrackBuilderTest : FunSpec({
             // And the second cue of the window opens holding what the first said.
             inLongGap.first { it.cueOrdinal == 1 }.previousText shouldBe
                 "She hauls herself over the lip of the ridge and lies flat."
+        }
+
+        test("a cue cap offers no slot more than the cap, where uncapped the long window offers more") {
+            val uncapped = RecordingDrafter(RecordedDrafting.fromResource(LongGapFixtures.DRAFTS_JSON))
+            LongGapFixtures.builder(drafting = uncapped).build(LongGapFixtures.request)
+            uncapped.asks.filter { it.attempt == 0 }.maxOf { it.targetDurationMs } shouldBeGreaterThan 4_000L
+
+            val capped = RecordingDrafter(RecordedDrafting.fromResource(LongGapFixtures.DRAFTS_JSON))
+            LongGapFixtures.builder(PipelineConfig(maxCueMs = 4_000), capped).build(LongGapFixtures.request)
+            capped.asks.filter { it.attempt == 0 }.maxOf { it.targetDurationMs } shouldBeLessThanOrEqual 4_000L
+        }
+
+        test("each ask carries its own cue's slot: where the cue starts, as long as the room offered") {
+            val drafter = RecordingDrafter(RecordedDrafting.fromResource(LongGapFixtures.DRAFTS_JSON))
+            val track = LongGapFixtures.builder(PipelineConfig(maxCueMs = 4_000), drafter).build(LongGapFixtures.request).track
+            val firstAsks = drafter.asks.filter { it.attempt == 0 }
+            // A slot that ends up with no cue -- the window's last try -- is still asked about.
+            val slotStarts = firstAsks.map { it.slot.startMs }
+            track.cues.all { it.startMs in slotStarts } shouldBe true
+            firstAsks.forEach { it.slot.durationMs shouldBeLessThanOrEqual 4_000L }
+        }
+
+        test("capped, a slot the drafter declines is skipped, and the rest of the window is still described") {
+            val recorded = RecordedDrafting.fromResource(LongGapFixtures.DRAFTS_JSON)
+            var declined: Gap? = null
+            val declinesOnce = object : Drafting {
+                override fun draft(request: DraftRequest): Draft? =
+                    if (declined == null && request.cueOrdinal == 1) { declined = request.slot; null } else recorded.draft(request)
+            }
+            val track = LongGapFixtures.builder(PipelineConfig(maxCueMs = 4_000), declinesOnce).build(LongGapFixtures.request).track
+
+            val skipped = checkNotNull(declined)
+            track.cues.none { it.startMs == skipped.startMs } shouldBe true
+            track.cues.any { it.startMs >= skipped.endMs && it.startMs < skipped.endMs + 4_000 } shouldBe true
         }
 
         test("the runtime speaks every cue in the packed window, and refuses none") {
