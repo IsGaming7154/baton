@@ -361,11 +361,11 @@ class DescriptionTrackBuilderTest : FunSpec({
 
         test("each ask carries its own cue's slot: where the cue starts, as long as the room offered") {
             val drafter = RecordingDrafter(RecordedDrafting.fromResource(LongGapFixtures.DRAFTS_JSON))
-            val track = LongGapFixtures.builder(PipelineConfig(maxCueMs = 4_000), drafter).build(LongGapFixtures.request).track
+            val capped = LongGapFixtures.builder(PipelineConfig(maxCueMs = 4_000), drafter).build(LongGapFixtures.request).track
             val firstAsks = drafter.asks.filter { it.attempt == 0 }
             // A slot that ends up with no cue -- the window's last try -- is still asked about.
             val slotStarts = firstAsks.map { it.slot.startMs }
-            track.cues.all { it.startMs in slotStarts } shouldBe true
+            capped.cues.all { it.startMs in slotStarts } shouldBe true
             firstAsks.forEach { it.slot.durationMs shouldBeLessThanOrEqual 4_000L }
         }
 
@@ -376,11 +376,11 @@ class DescriptionTrackBuilderTest : FunSpec({
                 override fun draft(request: DraftRequest): Draft? =
                     if (declined == null && request.cueOrdinal == 1) { declined = request.slot; null } else recorded.draft(request)
             }
-            val track = LongGapFixtures.builder(PipelineConfig(maxCueMs = 4_000), declinesOnce).build(LongGapFixtures.request).track
+            val capped = LongGapFixtures.builder(PipelineConfig(maxCueMs = 4_000), declinesOnce).build(LongGapFixtures.request).track
 
             val skipped = checkNotNull(declined)
-            track.cues.none { it.startMs == skipped.startMs } shouldBe true
-            track.cues.any { it.startMs >= skipped.endMs && it.startMs < skipped.endMs + 4_000 } shouldBe true
+            capped.cues.none { it.startMs == skipped.startMs } shouldBe true
+            capped.cues.any { it.startMs >= skipped.endMs && it.startMs < skipped.endMs + 4_000 } shouldBe true
         }
 
         test("the runtime speaks every cue in the packed window, and refuses none") {
