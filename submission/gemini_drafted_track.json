@@ -1,0 +1,290 @@
+{
+    "formatVersion": 1,
+    "sourceId": "sample_clip",
+    "locale": "en-US",
+    "synthetic": true,
+    "gapMap": [
+        {
+            "startMs": 0,
+            "endMs": 4090
+        },
+        {
+            "startMs": 6369,
+            "endMs": 9979
+        },
+        {
+            "startMs": 12380,
+            "endMs": 15970
+        },
+        {
+            "startMs": 20969,
+            "endMs": 24590
+        },
+        {
+            "startMs": 25069,
+            "endMs": 27000
+        },
+        {
+            "startMs": 27510,
+            "endMs": 28750
+        },
+        {
+            "startMs": 30879,
+            "endMs": 35810
+        },
+        {
+            "startMs": 36930,
+            "endMs": 37250
+        },
+        {
+            "startMs": 38169,
+            "endMs": 38689
+        },
+        {
+            "startMs": 39770,
+            "endMs": 43389
+        },
+        {
+            "startMs": 44029,
+            "endMs": 47729
+        },
+        {
+            "startMs": 49610,
+            "endMs": 53520
+        },
+        {
+            "startMs": 53529,
+            "endMs": 53869
+        },
+        {
+            "startMs": 56389,
+            "endMs": 88600
+        }
+    ],
+    "cues": [
+        {
+            "id": "ad-0",
+            "startMs": 150,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "A fire burns dimly inside a dark room.",
+                    "measuredDurationMs": 3249,
+                    "audioRef": null
+                },
+                {
+                    "text": "A fire burns dimly.",
+                    "measuredDurationMs": 1794,
+                    "audioRef": null
+                },
+                {
+                    "text": "A fire burns.",
+                    "measuredDurationMs": 1430,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-6369",
+            "startMs": 6519,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "A man examines a decorated staff.",
+                    "measuredDurationMs": 2521,
+                    "audioRef": null
+                },
+                {
+                    "text": "A man examines a staff.",
+                    "measuredDurationMs": 2158,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-12380",
+            "startMs": 12530,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "A person with short red hair watches.",
+                    "measuredDurationMs": 2885,
+                    "audioRef": null
+                },
+                {
+                    "text": "A person watches.",
+                    "measuredDurationMs": 1430,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-30879",
+            "startMs": 31029,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "A person holds a shallow bowl filled with swirling milky water.",
+                    "measuredDurationMs": 4339,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-49610",
+            "startMs": 49760,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "Sunlight illuminates a crowded medieval city.",
+                    "measuredDurationMs": 2521,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-56389",
+            "startMs": 56539,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "A person with a pink ponytail pries wooden planks apart.",
+                    "measuredDurationMs": 3976,
+                    "audioRef": null
+                },
+                {
+                    "text": "A person with a pink ponytail pries planks.",
+                    "measuredDurationMs": 3249,
+                    "audioRef": null
+                },
+                {
+                    "text": "A person pries planks.",
+                    "measuredDurationMs": 1794,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-56389-1",
+            "startMs": 60765,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "A person with short red hair peers over a wooden plank.",
+                    "measuredDurationMs": 4339,
+                    "audioRef": null
+                },
+                {
+                    "text": "A person peers over wood.",
+                    "measuredDurationMs": 2158,
+                    "audioRef": null
+                },
+                {
+                    "text": "A person peers.",
+                    "measuredDurationMs": 1430,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-56389-2",
+            "startMs": 69854,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "A hand exchanges the apple for a prickly brown sphere.",
+                    "measuredDurationMs": 3976,
+                    "audioRef": null
+                },
+                {
+                    "text": "A hand exchanges the apple for a spiky husk.",
+                    "measuredDurationMs": 3612,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-56389-3",
+            "startMs": 74080,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "She drops the sphere, spins, and dashes down an alleyway.",
+                    "measuredDurationMs": 3976,
+                    "audioRef": null
+                },
+                {
+                    "text": "She sprints down a narrow alleyway.",
+                    "measuredDurationMs": 2521,
+                    "audioRef": null
+                },
+                {
+                    "text": "She runs through alleyways.",
+                    "measuredDurationMs": 1794,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-56389-4",
+            "startMs": 78306,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "A person with pink hair scrambles onto a tiled rooftop.",
+                    "measuredDurationMs": 3976,
+                    "audioRef": null
+                },
+                {
+                    "text": "A person with pink hair inspects a wounded beast.",
+                    "measuredDurationMs": 3612,
+                    "audioRef": null
+                },
+                {
+                    "text": "A person inspects a wounded beast.",
+                    "measuredDurationMs": 2521,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-56389-5",
+            "startMs": 82532,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "A wounded winged creature writhes on tiled roofing.",
+                    "measuredDurationMs": 3249,
+                    "audioRef": null
+                },
+                {
+                    "text": "A winged creature writhes.",
+                    "measuredDurationMs": 1794,
+                    "audioRef": null
+                }
+            ]
+        },
+        {
+            "id": "ad-56389-6",
+            "startMs": 86031,
+            "kind": "AUDIO_DESCRIPTION",
+            "variants": [
+                {
+                    "text": "The creature slides downward.",
+                    "measuredDurationMs": 1794,
+                    "audioRef": null
+                },
+                {
+                    "text": "The creature slides.",
+                    "measuredDurationMs": 1430,
+                    "audioRef": null
+                },
+                {
+                    "text": "Creature falls.",
+                    "measuredDurationMs": 1067,
+                    "audioRef": null
+                }
+            ]
+        }
+    ]
+}
