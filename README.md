@@ -1,5 +1,6 @@
 [![Baton: one voice at a time](docs/images/banner.png)](#baton-one-voice-at-a-time)
 
+[![Demo video](https://img.shields.io/badge/demo-watch%20on%20Vimeo-1ab7ea.svg)](https://vimeo.com/1238851719)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform: Fire TV](https://img.shields.io/badge/platform-Fire%20TV-orange.svg)](docs/BUILD.md)
 [![Android API 28](https://img.shields.io/badge/Android-API%2028-blue.svg)](docs/BUILD.md)
@@ -7,6 +8,8 @@
 [![Tests: 459 passing](https://img.shields.io/badge/tests-459%20passing-brightgreen.svg)](docs/NUMBERS.md)
 
 ## Baton: one voice at a time
+
+> #### [▶ Watch the demo (2:57), filmed on a real Fire TV Stick](https://vimeo.com/1238851719)
 
 A blind viewer puts on a foreign-language film. They need three voices at once: **audio description** to know what is on screen, **spoken subtitles** because they cannot read the translation, and the **VoiceView** screen reader to operate the TV at all. On Fire OS none of them knows the others exist, so all three talk at once, on top of the actors. Blind users report switching VoiceView off to escape it, trading the ability to operate the TV for the ability to hear it.
 
