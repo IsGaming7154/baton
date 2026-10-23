@@ -1,6 +1,8 @@
 <resources>
     <style name="Theme.Baton" parent="android:Theme.Material.NoActionBar">
         <item name="android:colorBackground">@android:color/black</item>
-        <item name="android:windowBackground">@android:color/black</item>
+        <!-- Transparent, because the film is a SurfaceView below this window; an opaque
+             window background covers it, and the Stick showed black where the film plays. -->
+        <item name="android:windowBackground">@android:color/transparent</item>
     </style>
 </resources>

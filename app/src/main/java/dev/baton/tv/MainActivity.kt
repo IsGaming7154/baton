@@ -19,10 +19,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.media3.common.Player
 import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
 import dev.baton.director.AudioDirector
 import dev.baton.director.DescriptionLength
 import dev.baton.director.DescriptionTrack
@@ -208,7 +210,12 @@ class MainActivity : ComponentActivity() {
         })
 
         setContent {
-            Surface(modifier = Modifier.fillMaxSize()) {
+            // Transparent, because the film is a SurfaceView below this window: an opaque
+            // container painted over it, and the Stick showed white where the film plays.
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                colors = SurfaceDefaults.colors(containerColor = Color.Transparent),
+            ) {
                 BatonPlayerSurface(
                     exoPlayer = player.exoPlayer,
                     modifier = Modifier.fillMaxSize(),
