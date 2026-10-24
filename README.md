@@ -65,7 +65,9 @@ Drafting was built for Amazon Bedrock (Nova). AWS declined Bedrock access for th
 
 ### Quick Start
 
-You need JDK 17+, the Android SDK (`ANDROID_HOME` or `local.properties`), and `adb` to install on a device. No device, network or AWS account is needed to run the tests.
+**Just want to try it?** [Download the APK](https://github.com/IsGaming7154/baton/releases/latest) and follow the install steps on the release page: one `adb install` onto a Fire TV.
+
+To build it yourself, you need JDK 17+, the Android SDK (`ANDROID_HOME` or `local.properties`), and `adb` to install on a device. No device, network or AWS account is needed to run the tests.
 
 ```sh
 ./gradlew test :speech:testDebugUnitTest :player:testDebugUnitTest :app:testDebugUnitTest assembleDebug
